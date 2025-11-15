@@ -36,12 +36,21 @@ def main():
             "todos": todos
         }
 
-        # Ensure .claude directory exists
-        claude_dir = Path(project_dir) / ".claude"
-        claude_dir.mkdir(exist_ok=True)
+        # Determine log file path from environment or use default
+        custom_log_path = os.environ.get("TODO_LOG_PATH", "").strip()
 
-        # Path to the todos log file
-        todos_file = claude_dir / "todos.json"
+        if custom_log_path:
+            # Use custom path (support both absolute and relative paths)
+            todos_file = Path(custom_log_path)
+            if not todos_file.is_absolute():
+                # Resolve relative path against project directory
+                todos_file = Path(project_dir) / todos_file
+        else:
+            # Use default location: .claude/todos.json
+            todos_file = Path(project_dir) / ".claude" / "todos.json"
+
+        # Ensure parent directory exists
+        todos_file.parent.mkdir(parents=True, exist_ok=True)
 
         # Load existing history or create new
         history = []

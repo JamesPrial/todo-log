@@ -38,9 +38,43 @@ Once installed, the plugin works automatically. Every time Claude uses the TodoW
 
 1. Capture the todo list state
 2. Add timestamp and session metadata
-3. Append to `.claude/todos.json` in your project root
+3. Append to `.claude/todos.json` in your project root (or custom location if configured)
 
-No configuration needed!
+## Configuration
+
+### Custom Log Location
+
+By default, the plugin saves todos to `.claude/todos.json` in your project root. You can customize this location using the `TODO_LOG_PATH` environment variable.
+
+**Examples:**
+
+```bash
+# Use absolute path
+export TODO_LOG_PATH=/home/user/logs/my-todos.json
+
+# Use relative path (relative to project root)
+export TODO_LOG_PATH=logs/todos.json
+
+# Use custom .claude subdirectory
+export TODO_LOG_PATH=.claude/history/todos.json
+```
+
+**How it works:**
+- If `TODO_LOG_PATH` is set, the plugin uses that location
+- Relative paths are resolved against `CLAUDE_PROJECT_DIR`
+- Parent directories are created automatically if they don't exist
+- If not set, defaults to `.claude/todos.json`
+
+**Setting the environment variable:**
+
+You can set `TODO_LOG_PATH` in your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) or project-specific configuration:
+
+```bash
+# In ~/.bashrc or ~/.zshrc
+export TODO_LOG_PATH="logs/claude-todos.json"
+```
+
+Then restart Claude Code for the changes to take effect.
 
 ## Output Format
 
@@ -75,8 +109,9 @@ The plugin saves data to `.claude/todos.json` in the following format:
 
 ## File Location
 
-- **Log file**: `.claude/todos.json` (in your project root)
-- The `.claude` directory is automatically created if it doesn't exist
+- **Default location**: `.claude/todos.json` (in your project root)
+- **Custom location**: Set via `TODO_LOG_PATH` environment variable (see Configuration section)
+- Parent directories are automatically created if they don't exist
 
 ## Viewing Your Logs
 

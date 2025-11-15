@@ -1,7 +1,7 @@
 {
   "name": "todo-log",
-  "version": "0.1.0",
-  "description": "Captures TodoWrite tool usage and saves to timestamped history file in .claude/todos.json",
+  "version": "0.2.0",
+  "description": "Captures TodoWrite tool usage and saves to timestamped history file with configurable log location (default: .claude/todos.json)",
   "author": {
     "name": "James Prial"
   },
