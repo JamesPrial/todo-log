@@ -1,0 +1,162 @@
+[
+  {
+    "timestamp": "2025-11-15T05:25:05.991306Z",
+    "session_id": "785f2c7a-0b23-469c-a14c-bae9e301e779",
+    "cwd": "/home/jamesprial/code/claude-plugins",
+    "todos": [
+      {
+        "content": "Build a spaceship",
+        "status": "pending",
+        "activeForm": "Building a spaceship"
+      },
+      {
+        "content": "Learn to juggle flaming torches",
+        "status": "pending",
+        "activeForm": "Learning to juggle flaming torches"
+      },
+      {
+        "content": "Teach a cat to use a keyboard",
+        "status": "in_progress",
+        "activeForm": "Teaching a cat to use a keyboard"
+      },
+      {
+        "content": "Invent a new programming language",
+        "status": "pending",
+        "activeForm": "Inventing a new programming language"
+      },
+      {
+        "content": "Discover the meaning of life",
+        "status": "completed",
+        "activeForm": "Discovering the meaning of life"
+      }
+    ]
+  },
+  {
+    "timestamp": "2025-11-15T05:26:13.558806Z",
+    "session_id": "785f2c7a-0b23-469c-a14c-bae9e301e779",
+    "cwd": "/home/jamesprial/code/claude-plugins",
+    "todos": [
+      {
+        "content": "Build a spaceship",
+        "status": "in_progress",
+        "activeForm": "Building a spaceship"
+      },
+      {
+        "content": "Learn to juggle flaming torches",
+        "status": "pending",
+        "activeForm": "Learning to juggle flaming torches"
+      },
+      {
+        "content": "Teach a cat to use a keyboard",
+        "status": "completed",
+        "activeForm": "Teaching a cat to use a keyboard"
+      },
+      {
+        "content": "Invent a new programming language",
+        "status": "pending",
+        "activeForm": "Inventing a new programming language"
+      },
+      {
+        "content": "Discover the meaning of life",
+        "status": "completed",
+        "activeForm": "Discovering the meaning of life"
+      }
+    ]
+  },
+  {
+    "timestamp": "2025-11-15T05:26:19.101039Z",
+    "session_id": "785f2c7a-0b23-469c-a14c-bae9e301e779",
+    "cwd": "/home/jamesprial/code/claude-plugins",
+    "todos": [
+      {
+        "content": "Build a spaceship",
+        "status": "completed",
+        "activeForm": "Building a spaceship"
+      },
+      {
+        "content": "Learn to juggle flaming torches",
+        "status": "in_progress",
+        "activeForm": "Learning to juggle flaming torches"
+      },
+      {
+        "content": "Teach a cat to use a keyboard",
+        "status": "completed",
+        "activeForm": "Teaching a cat to use a keyboard"
+      },
+      {
+        "content": "Invent a new programming language",
+        "status": "pending",
+        "activeForm": "Inventing a new programming language"
+      },
+      {
+        "content": "Discover the meaning of life",
+        "status": "completed",
+        "activeForm": "Discovering the meaning of life"
+      }
+    ]
+  },
+  {
+    "timestamp": "2025-11-15T05:26:23.091157Z",
+    "session_id": "785f2c7a-0b23-469c-a14c-bae9e301e779",
+    "cwd": "/home/jamesprial/code/claude-plugins",
+    "todos": [
+      {
+        "content": "Build a spaceship",
+        "status": "completed",
+        "activeForm": "Building a spaceship"
+      },
+      {
+        "content": "Learn to juggle flaming torches",
+        "status": "completed",
+        "activeForm": "Learning to juggle flaming torches"
+      },
+      {
+        "content": "Teach a cat to use a keyboard",
+        "status": "completed",
+        "activeForm": "Teaching a cat to use a keyboard"
+      },
+      {
+        "content": "Invent a new programming language",
+        "status": "in_progress",
+        "activeForm": "Inventing a new programming language"
+      },
+      {
+        "content": "Discover the meaning of life",
+        "status": "completed",
+        "activeForm": "Discovering the meaning of life"
+      }
+    ]
+  },
+  {
+    "timestamp": "2025-11-15T05:26:27.696869Z",
+    "session_id": "785f2c7a-0b23-469c-a14c-bae9e301e779",
+    "cwd": "/home/jamesprial/code/claude-plugins",
+    "todos": [
+      {
+        "content": "Build a spaceship",
+        "status": "completed",
+        "activeForm": "Building a spaceship"
+      },
+      {
+        "content": "Learn to juggle flaming torches",
+        "status": "completed",
+        "activeForm": "Learning to juggle flaming torches"
+      },
+      {
+        "content": "Teach a cat to use a keyboard",
+        "status": "completed",
+        "activeForm": "Teaching a cat to use a keyboard"
+      },
+      {
+        "content": "Invent a new programming language",
+        "status": "completed",
+        "activeForm": "Inventing a new programming language"
+      },
+      {
+        "content": "Discover the meaning of life",
+        "status": "completed",
+        "activeForm": "Discovering the meaning of life"
+      }
+    ]
+  }
+]
