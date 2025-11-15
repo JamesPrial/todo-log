@@ -1,0 +1,17 @@
+{
+  "description": "Capture TodoWrite tool usage and save to timestamped history",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "TodoWrite",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/save-todos.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

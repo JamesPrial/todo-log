@@ -1,0 +1,11 @@
+{
+  "name": "todo-log",
+  "version": "0.1.0",
+  "description": "Captures TodoWrite tool usage and saves to timestamped history file in .claude/todos.json",
+  "author": {
+    "name": "James Prial"
+  },
+  "license": "MIT",
+  "keywords": ["productivity", "todos", "logging", "history", "tracking"],
+  "hooks": "./hooks/hooks.json"
+}
