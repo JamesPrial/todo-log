@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/save-todos.py",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/save_todos.py",
             "timeout": 30
           }
         ]
