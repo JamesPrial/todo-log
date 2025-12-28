@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is the **todo-log** plugin (v0.2.0) for Claude Code. It automatically logs TodoWrite tool usage to `.claude/todos.json` using a PostToolUse hook.
+This is the **todo-log** plugin (v1.0.0) for Claude Code. It automatically logs TodoWrite tool usage to `.claude/todos.json` using a PostToolUse hook.
 
 ## Development Commands
 
