@@ -101,7 +101,10 @@ def validate_todos(todos: Any) -> list[TodoItem]:
 
 def resolve_safe_path(base_dir: Path, user_path: str) -> Path | None:
     """Resolve a path, ensuring it stays within base_dir."""
-    if not user_path:
+    if not user_path or not user_path.strip():
+        return None
+
+    if '\x00' in user_path:
         return None
 
     candidate = Path(user_path)
