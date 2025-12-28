@@ -171,14 +171,3 @@ todo-log/
 3. Use TodoWrite in Claude Code
 4. Verify `.claude/todos.json` is created and updated
 
-## License
-
-MIT License - See LICENSE file for details
-
-## Contributing
-
-Contributions welcome! Please submit issues or pull requests on GitHub.
-
-## Support
-
-For issues or questions, please file an issue on the repository.
