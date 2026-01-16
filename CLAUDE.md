@@ -4,19 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is the **todo-log** plugin (v1.0.0) for Claude Code. It automatically logs TodoWrite tool usage to `.claude/todos.json` using a PostToolUse hook.
+This is the **todo-log** plugin (v1.1.0) for Claude Code. It automatically logs TodoWrite tool usage using a PostToolUse hook. Supports both JSON file and SQLite database backends.
 
 ## Development Commands
 
 ```bash
-# Run tests
+# Run all tests (main + storage package)
+cd scripts && PYTHONPATH=. python -m pytest test_save_todos.py storage/tests/ -v
+
+# Run only main tests
 python -m pytest scripts/test_save_todos.py -v
+
+# Run only storage backend tests
+cd scripts && PYTHONPATH=. python -m pytest storage/tests/ -v
 
 # Run a single test
 python -m pytest scripts/test_save_todos.py::TestValidateTodo::test_valid_todo_with_all_keys -v
-
-# Run tests directly (includes unittest runner)
-python scripts/test_save_todos.py
 ```
 
 ## Testing Plugin Changes
@@ -45,15 +48,36 @@ save_todos.py: reads stdin JSON → validates todos → appends to log file
 
 - `hooks/hooks.json` - Hook configuration (PostToolUse on TodoWrite)
 - `scripts/save_todos.py` - Main hook script (Python 3.10+, stdlib only)
-- `scripts/test_save_todos.py` - Pytest test suite (1300+ lines, 60+ tests)
+- `scripts/storage/` - Storage backend package
+  - `protocol.py` - TypedDicts and Protocol definitions
+  - `json_backend.py` - JSON file storage backend
+  - `sqlite_backend.py` - SQLite database backend with query support
+  - `__init__.py` - Backend factory function
+- `scripts/test_save_todos.py` - Main test suite (80+ tests)
+- `scripts/storage/tests/` - Storage backend tests (100+ tests)
 
 ### Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CLAUDE_PROJECT_DIR` | Yes | Project root, used for resolving log file path |
-| `TODO_LOG_PATH` | No | Custom log path (default: `.claude/todos.json`) |
+| `CLAUDE_PROJECT_DIR` | Yes | Project root, used for resolving paths |
+| `TODO_STORAGE_BACKEND` | No | `json` (default) or `sqlite` |
+| `TODO_LOG_PATH` | No | Custom JSON log path (default: `.claude/todos.json`) |
+| `TODO_SQLITE_PATH` | No | Custom SQLite path (default: `.claude/todos.db`) |
 | `DEBUG` | No | Enable debug logging to stderr |
+
+### Storage Backends
+
+**JSON Backend** (default):
+- Stores entries in a JSON array file
+- Atomic writes using temp file + rename
+- Good for simple use cases
+
+**SQLite Backend**:
+- Normalized tables: `log_entries` and `todos`
+- Query methods: `get_entries_by_session()`, `get_todos_by_status()`
+- WAL mode for concurrent access
+- Better for querying and large datasets
 
 ### Exit Codes
 

@@ -3,12 +3,17 @@
 TodoWrite Logger - PostToolUse hook for capturing TodoWrite events.
 
 This hook script receives JSON via stdin when the TodoWrite tool is used,
-extracts the todo list, and appends a timestamped entry to a JSON log file.
+extracts the todo list, and appends a timestamped entry to a configured storage backend.
 
 Environment Variables:
     CLAUDE_PROJECT_DIR (required): Project root directory for file operations.
-    TODO_LOG_PATH (optional): Custom log file path (relative to project or absolute).
+    TODO_STORAGE_BACKEND (optional): Storage backend to use ("json" or "sqlite").
+                                     Default: "json"
+    TODO_LOG_PATH (optional): Custom log file path for JSON backend
+                              (relative to project or absolute).
                               Default: .claude/todos.json
+    TODO_SQLITE_PATH (optional): Custom SQLite database path (when using sqlite backend).
+                                Default: .claude/todos.db
     DEBUG (optional): If set, enables debug logging to stderr.
 
 Exit Codes:
@@ -31,11 +36,13 @@ from __future__ import annotations
 import json
 import os
 import sys
-import tempfile
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
+
+from storage import get_storage_backend
+from storage.protocol import LogEntry, TodoItem
 
 # Version check
 if sys.version_info < (3, 10):
@@ -44,14 +51,6 @@ if sys.version_info < (3, 10):
 
 # Constants
 UNKNOWN_VALUE: str = "unknown"
-
-
-class TodoItem(TypedDict):
-    """Structure for a single todo item."""
-
-    content: str
-    status: str
-    activeForm: str
 
 
 class ToolInput(TypedDict):
@@ -67,15 +66,6 @@ class HookInput(TypedDict, total=False):
     tool_input: ToolInput
     session_id: str
     cwd: str
-
-
-class LogEntry(TypedDict):
-    """Structure for a log file entry."""
-
-    timestamp: str
-    session_id: str
-    cwd: str
-    todos: list[TodoItem]
 
 
 def utc_iso_timestamp() -> str:
@@ -100,7 +90,13 @@ def validate_todos(todos: Any) -> list[TodoItem]:
 
 
 def resolve_safe_path(base_dir: Path, user_path: str) -> Path | None:
-    """Resolve a path, ensuring it stays within base_dir."""
+    """Resolve a path, ensuring it stays within base_dir.
+    
+    Returns None if:
+    - user_path is empty or whitespace-only
+    - user_path contains null bytes
+    - resolved path escapes base_dir
+    """
     if not user_path or not user_path.strip():
         return None
 
@@ -155,64 +151,6 @@ def build_log_entry(hook_input: HookInput) -> LogEntry:
     }
 
 
-def get_log_file_path(project_dir: Path) -> Path:
-    """Determine the log file path from environment."""
-    custom_log_path = os.environ.get("TODO_LOG_PATH", "").strip()
-
-    if custom_log_path:
-        safe_path = resolve_safe_path(project_dir, custom_log_path)
-        if safe_path is None:
-            raise ValueError(
-                f"TODO_LOG_PATH '{custom_log_path}' escapes project directory"
-            )
-        return safe_path
-
-    # Default location
-    return project_dir / ".claude" / "todos.json"
-
-
-def load_existing_history(todos_file: Path) -> list[LogEntry]:
-    """Load existing history from log file, or return empty list."""
-    if not todos_file.exists():
-        return []
-
-    try:
-        with open(todos_file, "r", encoding="utf-8") as f:
-            history = json.load(f)
-            if not isinstance(history, list):
-                return []
-            return history
-    except json.JSONDecodeError:
-        # If file is corrupted, start fresh
-        return []
-
-
-def append_to_log(log_file: Path, entry: LogEntry) -> None:
-    """Atomically append entry to log file."""
-    # Ensure parent directory exists
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Load existing history
-    history = load_existing_history(log_file)
-
-    # Append new entry
-    history.append(entry)
-
-    # Write to temp file first, then atomically rename
-    temp_fd, temp_path = tempfile.mkstemp(dir=log_file.parent, suffix=".tmp")
-    try:
-        with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2)
-        os.replace(temp_path, log_file)  # Atomic on POSIX
-    except Exception:
-        # Clean up temp file on failure
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
-        raise
-
-
 def main() -> None:
     """Main entry point for the TodoWrite logger hook."""
     try:
@@ -232,14 +170,15 @@ def main() -> None:
         # Build the log entry
         entry = build_log_entry(hook_input)
 
-        # Determine log file path
-        log_file = get_log_file_path(project_dir)
+        # Get storage backend (reads TODO_STORAGE_BACKEND env var)
+        backend = get_storage_backend(project_dir)
 
-        # Append to log file atomically
-        append_to_log(log_file, entry)
+        # Append entry using backend
+        backend.append_entry(entry)
 
         # Output success message (shown in transcript mode with Ctrl-R)
-        print(f"Saved {len(entry['todos'])} todos to {log_file}")
+        backend_type = os.environ.get("TODO_STORAGE_BACKEND", "json").strip().lower()
+        print(f"Saved {len(entry['todos'])} todos ({backend_type} backend)")
 
         sys.exit(0)
 

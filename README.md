@@ -42,39 +42,55 @@ Once installed, the plugin works automatically. Every time Claude uses the TodoW
 
 ## Configuration
 
-### Custom Log Location
+### Storage Backend
 
-By default, the plugin saves todos to `.claude/todos.json` in your project root. You can customize this location using the `TODO_LOG_PATH` environment variable.
+The plugin supports two storage backends:
 
-**Examples:**
+| Backend | Default Path | Best For |
+|---------|--------------|----------|
+| JSON (default) | `.claude/todos.json` | Simple logging, human-readable |
+| SQLite | `.claude/todos.db` | Large datasets, querying by session/status |
 
+**Switch to SQLite:**
 ```bash
-# Use absolute path
-export TODO_LOG_PATH=/home/user/logs/my-todos.json
+export TODO_STORAGE_BACKEND=sqlite
+```
 
-# Use relative path (relative to project root)
+### Custom Paths
+
+**JSON Backend:**
+```bash
+# Use custom JSON log location
 export TODO_LOG_PATH=logs/todos.json
-
-# Use custom .claude subdirectory
-export TODO_LOG_PATH=.claude/history/todos.json
 ```
 
-**How it works:**
-- If `TODO_LOG_PATH` is set, the plugin uses that location
-- Relative paths are resolved against `CLAUDE_PROJECT_DIR`
-- Parent directories are created automatically if they don't exist
-- If not set, defaults to `.claude/todos.json`
-
-**Setting the environment variable:**
-
-You can set `TODO_LOG_PATH` in your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) or project-specific configuration:
-
+**SQLite Backend:**
 ```bash
-# In ~/.bashrc or ~/.zshrc
-export TODO_LOG_PATH="logs/claude-todos.json"
+export TODO_STORAGE_BACKEND=sqlite
+export TODO_SQLITE_PATH=data/todos.db
 ```
 
-Then restart Claude Code for the changes to take effect.
+**Path resolution:**
+- Relative paths are resolved against `CLAUDE_PROJECT_DIR`
+- Absolute paths work too (but must stay within project for security)
+- Parent directories are created automatically
+
+### SQLite Query Features
+
+When using SQLite backend, you can query your todos programmatically:
+
+```python
+from storage.sqlite_backend import SQLiteStorageBackend
+from pathlib import Path
+
+backend = SQLiteStorageBackend(Path(".claude/todos.db"))
+
+# Get all entries from a specific session
+entries = backend.get_entries_by_session("session-abc123")
+
+# Get all pending todos across all sessions
+pending = backend.get_todos_by_status("pending")
+```
 
 ## Output Format
 
@@ -159,7 +175,14 @@ todo-log/
 ├── hooks/
 │   └── hooks.json           # Hook configuration
 ├── scripts/
-│   └── save-todos.py        # Todo logging handler
+│   ├── save_todos.py        # Main hook entry point
+│   ├── test_save_todos.py   # Main test suite
+│   └── storage/             # Storage backend package
+│       ├── __init__.py      # Backend factory
+│       ├── protocol.py      # Types and protocols
+│       ├── json_backend.py  # JSON file backend
+│       ├── sqlite_backend.py # SQLite database backend
+│       └── tests/           # Backend tests
 ├── LICENSE
 └── README.md
 ```

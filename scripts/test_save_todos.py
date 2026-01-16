@@ -33,16 +33,13 @@ from save_todos import (
     resolve_safe_path,
     read_hook_input,
     build_log_entry,
-    get_log_file_path,
-    load_existing_history,
-    append_to_log,
     main,
     # Type definitions
-    TodoItem,
     HookInput,
-    LogEntry,
     ToolInput,
 )
+from storage.protocol import TodoItem, LogEntry
+from storage.json_backend import JSONStorageBackend
 
 # ISO 8601 timestamp pattern
 ISO_8601_PATTERN = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"
@@ -553,71 +550,18 @@ class TestBuildLogEntry:
 
 
 # =============================================================================
-# TestGetLogFilePath
-# =============================================================================
-
-
-class TestGetLogFilePath:
-    """Tests for get_log_file_path() function."""
-
-    def test_default_path_when_no_env_var(self, tmp_project: Path) -> None:
-        """Default path is project/.claude/todos.json when no env var."""
-        env_without_todo_log = {
-            k: v for k, v in os.environ.items() if k != "TODO_LOG_PATH"
-        }
-        with patch.dict(os.environ, env_without_todo_log, clear=True):
-            result = get_log_file_path(tmp_project)
-
-        assert result == tmp_project / ".claude" / "todos.json"
-
-    def test_custom_relative_path(self, tmp_project: Path) -> None:
-        """Custom relative TODO_LOG_PATH resolves correctly."""
-        with patch.dict(os.environ, {"TODO_LOG_PATH": "logs/todos.json"}):
-            result = get_log_file_path(tmp_project)
-
-        assert result == tmp_project / "logs" / "todos.json"
-
-    def test_custom_absolute_path_within_project(self, tmp_project: Path) -> None:
-        """Custom absolute TODO_LOG_PATH within project works."""
-        custom_path = tmp_project / "custom" / "todos.json"
-        with patch.dict(os.environ, {"TODO_LOG_PATH": str(custom_path)}):
-            result = get_log_file_path(tmp_project)
-
-        assert result == custom_path
-
-    def test_custom_path_escaping_raises_error(self, tmp_project: Path) -> None:
-        """TODO_LOG_PATH escaping project raises ValueError."""
-        with patch.dict(os.environ, {"TODO_LOG_PATH": "../../outside/path.json"}):
-            with pytest.raises(ValueError, match="escapes project directory"):
-                get_log_file_path(tmp_project)
-
-    def test_empty_todo_log_path_uses_default(self, tmp_project: Path) -> None:
-        """Empty TODO_LOG_PATH uses default path."""
-        with patch.dict(os.environ, {"TODO_LOG_PATH": ""}):
-            result = get_log_file_path(tmp_project)
-
-        assert result == tmp_project / ".claude" / "todos.json"
-
-    def test_whitespace_todo_log_path_uses_default(self, tmp_project: Path) -> None:
-        """Whitespace-only TODO_LOG_PATH uses default path."""
-        with patch.dict(os.environ, {"TODO_LOG_PATH": "   \t  "}):
-            result = get_log_file_path(tmp_project)
-
-        assert result == tmp_project / ".claude" / "todos.json"
-
-
-# =============================================================================
 # TestLoadExistingHistory
 # =============================================================================
 
 
 class TestLoadExistingHistory:
-    """Tests for load_existing_history() function."""
+    """Tests for JSONStorageBackend.load_history() method."""
 
     def test_nonexistent_file_returns_empty_list(self, tmp_project: Path) -> None:
         """Non-existent file returns empty list."""
         todos_file = tmp_project / ".claude" / "todos.json"
-        result = load_existing_history(todos_file)
+        backend = JSONStorageBackend(todos_file)
+        result = backend.load_history()
         assert result == []
 
     def test_valid_json_array_returns_list(self, tmp_project: Path) -> None:
@@ -641,7 +585,8 @@ class TestLoadExistingHistory:
         ]
         todos_file.write_text(json.dumps(entries))
 
-        result = load_existing_history(todos_file)
+        backend = JSONStorageBackend(todos_file)
+        result = backend.load_history()
         assert len(result) == 2
         assert result[0]["session_id"] == "session1"
         assert result[1]["session_id"] == "session2"
@@ -652,7 +597,8 @@ class TestLoadExistingHistory:
         todos_file.parent.mkdir(parents=True)
         todos_file.write_text("[]")
 
-        result = load_existing_history(todos_file)
+        backend = JSONStorageBackend(todos_file)
+        result = backend.load_history()
         assert result == []
 
     def test_corrupted_json_returns_empty_list(self, tmp_project: Path) -> None:
@@ -661,7 +607,8 @@ class TestLoadExistingHistory:
         todos_file.parent.mkdir(parents=True)
         todos_file.write_text("{not valid json]}")
 
-        result = load_existing_history(todos_file)
+        backend = JSONStorageBackend(todos_file)
+        result = backend.load_history()
         assert result == []
 
     def test_non_array_json_returns_empty_list(self, tmp_project: Path) -> None:
@@ -670,7 +617,8 @@ class TestLoadExistingHistory:
         todos_file.parent.mkdir(parents=True)
         todos_file.write_text('{"key": "value"}')
 
-        result = load_existing_history(todos_file)
+        backend = JSONStorageBackend(todos_file)
+        result = backend.load_history()
         assert result == []
 
     def test_unicode_content_works(self, tmp_project: Path) -> None:
@@ -694,7 +642,8 @@ class TestLoadExistingHistory:
         ]
         todos_file.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")
 
-        result = load_existing_history(todos_file)
+        backend = JSONStorageBackend(todos_file)
+        result = backend.load_history()
         assert len(result) == 1
         assert "🚀" in result[0]["todos"][0]["content"]
 
@@ -705,7 +654,7 @@ class TestLoadExistingHistory:
 
 
 class TestAppendToLog:
-    """Tests for append_to_log() function."""
+    """Tests for JSONStorageBackend.append_entry() method."""
 
     def test_creates_parent_directories(self, tmp_project: Path) -> None:
         """Creates parent directories if they don't exist."""
@@ -717,7 +666,8 @@ class TestAppendToLog:
             "todos": [],
         }
 
-        append_to_log(log_file, entry)
+        backend = JSONStorageBackend(log_file)
+        backend.append_entry(entry)
 
         assert log_file.exists()
         assert log_file.parent.exists()
@@ -732,7 +682,8 @@ class TestAppendToLog:
             "todos": [],
         }
 
-        append_to_log(log_file, entry)
+        backend = JSONStorageBackend(log_file)
+        backend.append_entry(entry)
 
         assert log_file.exists()
         content = json.loads(log_file.read_text())
@@ -762,7 +713,8 @@ class TestAppendToLog:
             "cwd": "/path2",
             "todos": [],
         }
-        append_to_log(log_file, new_entry)
+        backend = JSONStorageBackend(log_file)
+        backend.append_entry(new_entry)
 
         content = json.loads(log_file.read_text())
         assert len(content) == 2
@@ -796,7 +748,8 @@ class TestAppendToLog:
             "cwd": "/new/path",
             "todos": [],
         }
-        append_to_log(log_file, new_entry)
+        backend = JSONStorageBackend(log_file)
+        backend.append_entry(new_entry)
 
         content = json.loads(log_file.read_text())
         original = content[0]
@@ -813,7 +766,8 @@ class TestAppendToLog:
             "todos": [],
         }
 
-        append_to_log(log_file, entry)
+        backend = JSONStorageBackend(log_file)
+        backend.append_entry(entry)
 
         content = log_file.read_text()
         # Check for proper indentation (2 spaces)
@@ -839,8 +793,9 @@ class TestAppendToLog:
             mkstemp_called = True
             return original_mkstemp(*args, **kwargs)
 
-        with patch("save_todos.tempfile.mkstemp", side_effect=mock_mkstemp):
-            append_to_log(log_file, entry)
+        with patch("storage.json_backend.tempfile.mkstemp", side_effect=mock_mkstemp):
+            backend = JSONStorageBackend(log_file)
+            backend.append_entry(entry)
 
         assert mkstemp_called
 
@@ -865,7 +820,8 @@ class TestAppendToLog:
         with patch("os.replace", side_effect=mock_replace):
             with patch("os.unlink") as mock_unlink:
                 with pytest.raises(OSError):
-                    append_to_log(log_file, entry)
+                    backend = JSONStorageBackend(log_file)
+                    backend.append_entry(entry)
 
                 # Verify unlink was called to clean up temp file
                 assert mock_unlink.called
@@ -886,7 +842,8 @@ class TestAppendToLog:
             ],
         }
 
-        append_to_log(log_file, entry)
+        backend = JSONStorageBackend(log_file)
+        backend.append_entry(entry)
 
         content = json.loads(log_file.read_text(encoding="utf-8"))
         assert "🎯" in content[0]["todos"][0]["content"]
@@ -894,6 +851,7 @@ class TestAppendToLog:
     def test_multiple_appends_accumulate(self, tmp_project: Path) -> None:
         """Multiple appends accumulate entries."""
         log_file = tmp_project / ".claude" / "todos.json"
+        backend = JSONStorageBackend(log_file)
 
         for i in range(5):
             entry = {
@@ -902,7 +860,7 @@ class TestAppendToLog:
                 "cwd": f"/path{i}",
                 "todos": [],
             }
-            append_to_log(log_file, entry)
+            backend.append_entry(entry)
 
         content = json.loads(log_file.read_text())
         assert len(content) == 5
@@ -996,7 +954,8 @@ class TestMain:
             os.environ, {"CLAUDE_PROJECT_DIR": str(tmp_project)}
         ):
             with patch("sys.stdin", StringIO(json.dumps(sample_hook_input))):
-                with patch("save_todos.append_to_log", side_effect=OSError("Disk full")):
+                # Patch JSONStorageBackend.append_entry since main() will use the backend
+                with patch.object(JSONStorageBackend, "append_entry", side_effect=OSError("Disk full")):
                     with pytest.raises(SystemExit) as exc_info:
                         main()
 
