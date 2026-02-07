@@ -3,8 +3,15 @@
   "version": "1.0.1",
   "description": "Captures TodoWrite tool usage and saves to timestamped history file with configurable log location (default: .claude/todos.json)",
   "author": {
-    "name": "James Prial"
+    "name": "James Prial",
+    "email": "prialjames17@gmail.com"
   },
   "license": "MIT",
-  "keywords": ["productivity", "todos", "logging", "history", "tracking"]
+  "keywords": [
+    "productivity",
+    "todos",
+    "logging",
+    "history",
+    "tracking"
+  ]
 }
