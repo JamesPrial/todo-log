@@ -15,26 +15,32 @@ import (
 // Test helpers (JSON backend specific)
 // ---------------------------------------------------------------------------
 
-// makeJSONEntry builds a LogEntry with a single TodoItem for concise test setup.
-func makeJSONEntry(content, status string) storage.LogEntry {
+// makeJSONEntry builds a LogEntry with a TaskItem for concise test setup.
+func makeJSONEntry(subject, status string) storage.LogEntry {
 	return storage.LogEntry{
 		Timestamp: "2025-01-01T00:00:00.000Z",
 		SessionID: "test-session",
 		Cwd:       "/test",
-		Todos: []storage.TodoItem{
-			{Content: content, Status: status, ActiveForm: "Testing"},
+		ToolName:  "TaskCreate",
+		Task: storage.TaskItem{
+			Subject:    subject,
+			Status:     status,
+			ActiveForm: "Testing",
 		},
 	}
 }
 
 // makeJSONEntryWithTimestamp builds a LogEntry with a custom timestamp for ordering tests.
-func makeJSONEntryWithTimestamp(ts, content string) storage.LogEntry {
+func makeJSONEntryWithTimestamp(ts, subject string) storage.LogEntry {
 	return storage.LogEntry{
 		Timestamp: ts,
 		SessionID: "test-session",
 		Cwd:       "/test",
-		Todos: []storage.TodoItem{
-			{Content: content, Status: "pending", ActiveForm: "Testing"},
+		ToolName:  "TaskCreate",
+		Task: storage.TaskItem{
+			Subject:    subject,
+			Status:     "pending",
+			ActiveForm: "Testing",
 		},
 	}
 }
@@ -111,11 +117,11 @@ func Test_JSONBackend_LoadHistory_Cases(t *testing.T) {
 			wantErr: false,
 			wantContents: func(t *testing.T, entries []storage.LogEntry) {
 				t.Helper()
-				if entries[0].Todos[0].Content != "task one" {
-					t.Errorf("first entry content = %q, want %q", entries[0].Todos[0].Content, "task one")
+				if entries[0].Task.Subject != "task one" {
+					t.Errorf("first entry subject = %q, want %q", entries[0].Task.Subject, "task one")
 				}
-				if entries[1].Todos[0].Content != "task two" {
-					t.Errorf("second entry content = %q, want %q", entries[1].Todos[0].Content, "task two")
+				if entries[1].Task.Subject != "task two" {
+					t.Errorf("second entry subject = %q, want %q", entries[1].Task.Subject, "task two")
 				}
 			},
 		},
@@ -172,10 +178,11 @@ func Test_JSONBackend_LoadHistory_Cases(t *testing.T) {
 						Timestamp: "2025-01-01T00:00:00.000Z",
 						SessionID: "unicode-session",
 						Cwd:       "/proyecto/espa\u00f1ol",
-						Todos: []storage.TodoItem{
-							{Content: "\u4f60\u597d\u4e16\u754c", Status: "pending", ActiveForm: "\u5904\u7406\u4e2d"},
-							{Content: "\u00e9\u00e0\u00fc\u00f6\u00e4", Status: "completed", ActiveForm: "\u00c9criture"},
-							{Content: "\U0001F680 rocket", Status: "in_progress", ActiveForm: "Launching \U0001F680"},
+						ToolName:  "TaskCreate",
+						Task: storage.TaskItem{
+							Subject:    "\u4f60\u597d\u4e16\u754c",
+							Status:     "pending",
+							ActiveForm: "\u5904\u7406\u4e2d",
 						},
 					},
 				}
@@ -191,14 +198,8 @@ func Test_JSONBackend_LoadHistory_Cases(t *testing.T) {
 			wantErr: false,
 			wantContents: func(t *testing.T, entries []storage.LogEntry) {
 				t.Helper()
-				if entries[0].Todos[0].Content != "\u4f60\u597d\u4e16\u754c" {
-					t.Errorf("chinese content not preserved: got %q", entries[0].Todos[0].Content)
-				}
-				if entries[0].Todos[1].Content != "\u00e9\u00e0\u00fc\u00f6\u00e4" {
-					t.Errorf("accented content not preserved: got %q", entries[0].Todos[1].Content)
-				}
-				if entries[0].Todos[2].Content != "\U0001F680 rocket" {
-					t.Errorf("emoji content not preserved: got %q", entries[0].Todos[2].Content)
+				if entries[0].Task.Subject != "\u4f60\u597d\u4e16\u754c" {
+					t.Errorf("chinese content not preserved: got %q", entries[0].Task.Subject)
 				}
 				if entries[0].Cwd != "/proyecto/espa\u00f1ol" {
 					t.Errorf("unicode cwd not preserved: got %q", entries[0].Cwd)
@@ -228,9 +229,9 @@ func Test_JSONBackend_LoadHistory_Cases(t *testing.T) {
 				t.Helper()
 				expected := []string{"first", "second", "third"}
 				for i, want := range expected {
-					got := entries[i].Todos[0].Content
+					got := entries[i].Task.Subject
 					if got != want {
-						t.Errorf("entry[%d] content = %q, want %q", i, got, want)
+						t.Errorf("entry[%d] subject = %q, want %q", i, got, want)
 					}
 				}
 			},
@@ -293,8 +294,8 @@ func Test_JSONBackend_AppendEntry_Cases(t *testing.T) {
 				if len(entries) != 1 {
 					t.Fatalf("expected 1 entry, got %d", len(entries))
 				}
-				if entries[0].Todos[0].Content != "first task" {
-					t.Errorf("content = %q, want %q", entries[0].Todos[0].Content, "first task")
+				if entries[0].Task.Subject != "first task" {
+					t.Errorf("subject = %q, want %q", entries[0].Task.Subject, "first task")
 				}
 			},
 		},
@@ -315,11 +316,11 @@ func Test_JSONBackend_AppendEntry_Cases(t *testing.T) {
 				if len(entries) != 2 {
 					t.Fatalf("expected 2 entries, got %d", len(entries))
 				}
-				if entries[0].Todos[0].Content != "existing" {
-					t.Errorf("first entry content = %q, want %q", entries[0].Todos[0].Content, "existing")
+				if entries[0].Task.Subject != "existing" {
+					t.Errorf("first entry subject = %q, want %q", entries[0].Task.Subject, "existing")
 				}
-				if entries[1].Todos[0].Content != "new task" {
-					t.Errorf("second entry content = %q, want %q", entries[1].Todos[0].Content, "new task")
+				if entries[1].Task.Subject != "new task" {
+					t.Errorf("second entry subject = %q, want %q", entries[1].Task.Subject, "new task")
 				}
 			},
 		},
@@ -356,27 +357,30 @@ func Test_JSONBackend_AppendEntry_Cases(t *testing.T) {
 			},
 		},
 		{
-			name:  "empty todos slice preserved",
+			name:  "task fields preserved in JSON",
 			setup: nil,
 			entry: storage.LogEntry{
 				Timestamp: "2025-01-01T00:00:00.000Z",
-				SessionID: "empty-todos-session",
+				SessionID: "task-fields-session",
 				Cwd:       "/test",
-				Todos:     []storage.TodoItem{},
+				ToolName:  "TaskCreate",
+				Task: storage.TaskItem{
+					Subject:    "my task",
+					Status:     "pending",
+					ActiveForm: "Working",
+				},
 			},
 			verify: func(t *testing.T, path string) {
 				t.Helper()
-				data, entries := readFileJSON(t, path)
+				_, entries := readFileJSON(t, path)
 				if len(entries) != 1 {
 					t.Fatalf("expected 1 entry, got %d", len(entries))
 				}
-				var raw []map[string]json.RawMessage
-				if err := json.Unmarshal(data, &raw); err != nil {
-					t.Fatalf("unmarshal raw: %v", err)
+				if entries[0].Task.Subject != "my task" {
+					t.Errorf("Task.Subject = %q, want %q", entries[0].Task.Subject, "my task")
 				}
-				todosJSON := strings.TrimSpace(string(raw[0]["todos"]))
-				if todosJSON != "[]" {
-					t.Errorf("expected todos to be [], got %s", todosJSON)
+				if entries[0].ToolName != "TaskCreate" {
+					t.Errorf("ToolName = %q, want %q", entries[0].ToolName, "TaskCreate")
 				}
 			},
 		},
@@ -387,9 +391,11 @@ func Test_JSONBackend_AppendEntry_Cases(t *testing.T) {
 				Timestamp: "2025-01-01T00:00:00.000Z",
 				SessionID: "unicode-sess",
 				Cwd:       "/proyecto/espa\u00f1ol",
-				Todos: []storage.TodoItem{
-					{Content: "\u4f60\u597d\u4e16\u754c", Status: "pending", ActiveForm: "\u5904\u7406\u4e2d"},
-					{Content: "\U0001F680 rocket launch", Status: "in_progress", ActiveForm: "Launching \U0001F680"},
+				ToolName:  "TaskCreate",
+				Task: storage.TaskItem{
+					Subject:    "\u4f60\u597d\u4e16\u754c",
+					Status:     "pending",
+					ActiveForm: "\u5904\u7406\u4e2d",
 				},
 			},
 			verify: func(t *testing.T, path string) {
@@ -401,11 +407,8 @@ func Test_JSONBackend_AppendEntry_Cases(t *testing.T) {
 				if entries[0].Cwd != "/proyecto/espa\u00f1ol" {
 					t.Errorf("cwd unicode not preserved: %q", entries[0].Cwd)
 				}
-				if entries[0].Todos[0].Content != "\u4f60\u597d\u4e16\u754c" {
-					t.Errorf("chinese content not preserved: %q", entries[0].Todos[0].Content)
-				}
-				if entries[0].Todos[1].Content != "\U0001F680 rocket launch" {
-					t.Errorf("emoji content not preserved: %q", entries[0].Todos[1].Content)
+				if entries[0].Task.Subject != "\u4f60\u597d\u4e16\u754c" {
+					t.Errorf("chinese subject not preserved: %q", entries[0].Task.Subject)
 				}
 			},
 		},
@@ -424,8 +427,8 @@ func Test_JSONBackend_AppendEntry_Cases(t *testing.T) {
 				if len(entries) != 1 {
 					t.Fatalf("expected 1 entry after recovery, got %d", len(entries))
 				}
-				if entries[0].Todos[0].Content != "fresh start" {
-					t.Errorf("content = %q, want %q", entries[0].Todos[0].Content, "fresh start")
+				if entries[0].Task.Subject != "fresh start" {
+					t.Errorf("subject = %q, want %q", entries[0].Task.Subject, "fresh start")
 				}
 			},
 		},
@@ -436,12 +439,11 @@ func Test_JSONBackend_AppendEntry_Cases(t *testing.T) {
 				Timestamp: "2025-01-01T00:00:00.000Z",
 				SessionID: "large-content-session",
 				Cwd:       "/test",
-				Todos: []storage.TodoItem{
-					{
-						Content:    strings.Repeat("x", 10*1024),
-						Status:     "pending",
-						ActiveForm: "Processing large content",
-					},
+				ToolName:  "TaskCreate",
+				Task: storage.TaskItem{
+					Subject:    strings.Repeat("x", 10*1024),
+					Status:     "pending",
+					ActiveForm: "Processing large content",
 				},
 			},
 			verify: func(t *testing.T, path string) {
@@ -450,8 +452,8 @@ func Test_JSONBackend_AppendEntry_Cases(t *testing.T) {
 				if len(entries) != 1 {
 					t.Fatalf("expected 1 entry, got %d", len(entries))
 				}
-				if len(entries[0].Todos[0].Content) != 10*1024 {
-					t.Errorf("content length = %d, want %d", len(entries[0].Todos[0].Content), 10*1024)
+				if len(entries[0].Task.Subject) != 10*1024 {
+					t.Errorf("subject length = %d, want %d", len(entries[0].Task.Subject), 10*1024)
 				}
 			},
 		},
@@ -553,9 +555,9 @@ func Test_JSONBackend_AppendEntry_MultipleSequentialAppends(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		want := "task " + string(rune('A'+i))
-		got := entries[i].Todos[0].Content
+		got := entries[i].Task.Subject
 		if got != want {
-			t.Errorf("entry[%d] content = %q, want %q", i, got, want)
+			t.Errorf("entry[%d] subject = %q, want %q", i, got, want)
 		}
 	}
 
@@ -583,10 +585,12 @@ func Test_JSONBackend_AppendEntry_LoadHistory_Roundtrip(t *testing.T) {
 		Timestamp: "2025-06-15T12:30:45.123Z",
 		SessionID: "roundtrip-session-xyz",
 		Cwd:       "/home/user/project",
-		Todos: []storage.TodoItem{
-			{Content: "implement feature", Status: "in_progress", ActiveForm: "Implementing feature"},
-			{Content: "write tests", Status: "pending", ActiveForm: "Writing tests"},
-			{Content: "deploy", Status: "completed", ActiveForm: "Deploying"},
+		ToolName:  "TaskCreate",
+		Task: storage.TaskItem{
+			Subject:     "implement feature",
+			Description: "Feature implementation",
+			Status:      "in_progress",
+			ActiveForm:  "Implementing feature",
 		},
 	}
 
@@ -613,13 +617,17 @@ func Test_JSONBackend_AppendEntry_LoadHistory_Roundtrip(t *testing.T) {
 	if got.Cwd != original.Cwd {
 		t.Errorf("Cwd = %q, want %q", got.Cwd, original.Cwd)
 	}
-	if len(got.Todos) != len(original.Todos) {
-		t.Fatalf("Todos length = %d, want %d", len(got.Todos), len(original.Todos))
+	if got.ToolName != original.ToolName {
+		t.Errorf("ToolName = %q, want %q", got.ToolName, original.ToolName)
 	}
-	for i := range original.Todos {
-		if got.Todos[i] != original.Todos[i] {
-			t.Errorf("Todos[%d] = %+v, want %+v", i, got.Todos[i], original.Todos[i])
-		}
+	if got.Task.Subject != original.Task.Subject {
+		t.Errorf("Task.Subject = %q, want %q", got.Task.Subject, original.Task.Subject)
+	}
+	if got.Task.Status != original.Task.Status {
+		t.Errorf("Task.Status = %q, want %q", got.Task.Status, original.Task.Status)
+	}
+	if got.Task.ActiveForm != original.Task.ActiveForm {
+		t.Errorf("Task.ActiveForm = %q, want %q", got.Task.ActiveForm, original.Task.ActiveForm)
 	}
 }
 
@@ -673,8 +681,8 @@ func Test_JSONBackend_LoadHistory_FreshBackendReadsExistingFile(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
-	if entries[0].Todos[0].Content != "persisted" {
-		t.Errorf("content = %q, want %q", entries[0].Todos[0].Content, "persisted")
+	if entries[0].Task.Subject != "persisted" {
+		t.Errorf("subject = %q, want %q", entries[0].Task.Subject, "persisted")
 	}
 }
 
@@ -693,8 +701,11 @@ func Test_JSONBackend_AppendEntry_JSONKeyNames(t *testing.T) {
 		Timestamp: "2025-01-01T00:00:00Z",
 		SessionID: "key-check-session",
 		Cwd:       "/test",
-		Todos: []storage.TodoItem{
-			{Content: "task", Status: "pending", ActiveForm: "Doing"},
+		ToolName:  "TaskCreate",
+		Task: storage.TaskItem{
+			Subject:    "task",
+			Status:     "pending",
+			ActiveForm: "Doing",
 		},
 	}
 	if err := backend.AppendEntry(entry); err != nil {
@@ -713,7 +724,10 @@ func Test_JSONBackend_AppendEntry_JSONKeyNames(t *testing.T) {
 	if !strings.Contains(content, `"activeForm"`) {
 		t.Errorf("expected \"activeForm\" key in JSON output")
 	}
-	for _, key := range []string{"timestamp", "cwd", "content", "status", "todos"} {
+	if !strings.Contains(content, `"tool_name"`) {
+		t.Errorf("expected \"tool_name\" key in JSON output")
+	}
+	for _, key := range []string{"timestamp", "cwd", "subject", "status", "task"} {
 		if !strings.Contains(content, `"`+key+`"`) {
 			t.Errorf("expected %q key in JSON output", key)
 		}
@@ -731,7 +745,7 @@ func Test_JSONBackend_LoadHistory_MalformedJSON_Cases(t *testing.T) {
 		name    string
 		content string
 	}{
-		{name: "truncated array", content: `[{"timestamp":"t","session_id":"s","cwd":"c","todos":[]`},
+		{name: "truncated array", content: `[{"timestamp":"t","session_id":"s","cwd":"c","tool_name":"TaskCreate","task":{"subject":"x","status":"p"}}`},
 		{name: "null literal", content: "null"},
 		{name: "number literal", content: "42"},
 		{name: "string literal", content: `"hello"`},

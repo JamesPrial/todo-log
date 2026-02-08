@@ -58,13 +58,6 @@ func (b *JSONBackend) LoadHistory() ([]LogEntry, error) {
 		return make([]LogEntry, 0), nil
 	}
 
-	// Normalize any entries with nil Todos to empty slice
-	for i := range entries {
-		if entries[i].Todos == nil {
-			entries[i].Todos = make([]TodoItem, 0)
-		}
-	}
-
 	return entries, nil
 }
 
@@ -77,11 +70,6 @@ func (b *JSONBackend) LoadHistory() ([]LogEntry, error) {
 // Returns an error if there's a file system error during directory creation,
 // file writing, or atomic rename operation.
 func (b *JSONBackend) AppendEntry(entry LogEntry) error {
-	// Ensure Todos is never nil to produce [] not null in JSON
-	if entry.Todos == nil {
-		entry.Todos = make([]TodoItem, 0)
-	}
-
 	// Ensure parent directory exists
 	dir := filepath.Dir(b.LogFile)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

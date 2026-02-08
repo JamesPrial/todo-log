@@ -1,19 +1,20 @@
 # Todo-Log Plugin
 
-A Claude Code plugin that automatically captures all TodoWrite tool activity and saves it as timestamped history.
+A Claude Code plugin that automatically captures all TaskCreate/TaskUpdate tool activity and saves it as timestamped history.
 
 ## Overview
 
-This plugin hooks into Claude Code's TodoWrite tool usage and maintains a comprehensive log of all todo updates in `.claude/todos.json` at your project root. Perfect for tracking task progress over time, analyzing workflow patterns, or maintaining an audit trail of your work sessions.
+This plugin hooks into Claude Code's TaskCreate and TaskUpdate tool usage and maintains a comprehensive log of all task operations in `.claude/todos.json` at your project root. Perfect for tracking task progress over time, analyzing workflow patterns, or maintaining an audit trail of your work sessions.
 
 ## Features
 
-- **Automatic Capture**: Logs every TodoWrite tool invocation without manual intervention
+- **Automatic Capture**: Logs every TaskCreate and TaskUpdate invocation without manual intervention
 - **Timestamped History**: Each entry includes ISO 8601 timestamp for precise tracking
 - **Session Tracking**: Records session ID and working directory for context
 - **Non-Intrusive**: Runs silently in the background via PostToolUse hook
 - **Persistent Storage**: Maintains complete history across sessions
 - **Dual Backends**: JSON (default) or SQLite for querying large datasets
+- **Rich Task Model**: Tracks subject, description, status, owner, dependencies, and metadata
 
 ## Installation
 
@@ -37,9 +38,9 @@ Copy the `todo-log` directory to your Claude Code plugins location and enable it
 
 ## Usage
 
-Once installed, the plugin works automatically. Every time Claude uses the TodoWrite tool, the plugin will:
+Once installed, the plugin works automatically. Every time Claude uses the TaskCreate or TaskUpdate tool, the plugin will:
 
-1. Capture the todo list state
+1. Capture the task data (subject, description, status, dependencies, etc.)
 2. Add timestamp and session metadata
 3. Append to `.claude/todos.json` in your project root (or custom location if configured)
 
@@ -80,14 +81,17 @@ export TODO_SQLITE_PATH=data/todos.db
 
 ### SQLite Query Features
 
-When using the SQLite backend, you can query your todos directly:
+When using the SQLite backend, you can query your tasks directly:
 
 ```bash
 # Get all entries from a specific session
-sqlite3 .claude/todos.db "SELECT e.timestamp, t.content, t.status FROM log_entries e JOIN todos t ON e.id = t.entry_id WHERE e.session_id = 'session-abc123'"
+sqlite3 .claude/todos.db "SELECT timestamp, subject, status FROM log_entries WHERE session_id = 'session-abc123'"
 
-# Get all pending todos across all sessions
-sqlite3 .claude/todos.db "SELECT content, active_form FROM todos WHERE status = 'pending'"
+# Get all pending tasks across all sessions
+sqlite3 .claude/todos.db "SELECT subject, active_form FROM log_entries WHERE status = 'pending'"
+
+# Get tasks with their dependencies
+sqlite3 .claude/todos.db "SELECT subject, status, blocks, blocked_by FROM log_entries WHERE blocks != '[]' OR blocked_by != '[]'"
 ```
 
 ## Output Format
@@ -100,23 +104,23 @@ The plugin saves data to `.claude/todos.json` in the following format:
     "timestamp": "2025-11-14T10:30:45.123Z",
     "session_id": "abc123def456",
     "cwd": "/home/user/my-project",
-    "todos": [
-      {
-        "content": "Implement user authentication",
-        "status": "completed",
-        "activeForm": "Implementing user authentication"
-      },
-      {
-        "content": "Write unit tests",
-        "status": "in_progress",
-        "activeForm": "Writing unit tests"
-      },
-      {
-        "content": "Update documentation",
-        "status": "pending",
-        "activeForm": "Updating documentation"
-      }
-    ]
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Implement user authentication",
+      "description": "Add JWT-based auth to the API endpoints",
+      "status": "pending",
+      "activeForm": "Implementing user authentication"
+    }
+  },
+  {
+    "timestamp": "2025-11-14T10:35:12.456Z",
+    "session_id": "abc123def456",
+    "cwd": "/home/user/my-project",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "1",
+      "status": "in_progress"
+    }
   }
 ]
 ```
@@ -129,7 +133,7 @@ The plugin saves data to `.claude/todos.json` in the following format:
 
 ## Viewing Your Logs
 
-You can view your todo history at any time:
+You can view your task history at any time:
 
 ```bash
 cat .claude/todos.json
@@ -171,7 +175,7 @@ make clean    # Remove binary
 
 Releases are automated via GitHub Actions. To create a new release:
 
-1. Tag and push: `git tag v2.1.0 && git push origin v2.1.0`
+1. Tag and push: `git tag v3.0.0 && git push origin v3.0.0`
 2. CI builds cross-platform binaries and pushes them to the `releases` branch
 3. Update the SHA in `prial-plugins` marketplace.json with the value printed by the workflow
 
@@ -191,5 +195,5 @@ The `releases` branch is an orphan branch containing only the plugin metadata an
 
 1. Build: `make build`
 2. Install the plugin in test mode
-3. Use TodoWrite in Claude Code
+3. Use TaskCreate/TaskUpdate in Claude Code
 4. Verify `.claude/todos.json` is created and updated

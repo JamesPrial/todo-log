@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-02-08
+
+### Breaking Changes
+- **Tool rename**: Hook matcher changed from `TodoWrite` to `TaskCreate|TaskUpdate` to match Claude Code's renamed tools
+- **Data model**: `TodoItem` replaced with `TaskItem` — new fields: `id`, `subject`, `description`, `owner`, `blocks`, `blockedBy`, `metadata`; removed: `content`
+- **Log entry format**: `todos` array replaced with singular `task` object + `tool_name` field
+- **SQLite schema**: Single `log_entries` table with inline task fields (replaces normalized `log_entries` + `todos` tables)
+- **Query API**: `GetTodosByStatus()` renamed to `GetTasksByStatus()`
+
+### Added
+- Support for `TaskCreate` and `TaskUpdate` PostToolUse events
+- `ParseTaskInput()` for mapping TaskCreate/TaskUpdate payloads to `TaskItem`
+- Task dependency tracking (`blocks`, `blockedBy` fields)
+- Task ownership tracking (`owner` field)
+- Arbitrary metadata support (`metadata` field)
+
+### Changed
+- Rewrote Go implementation from `TodoItem`/`TodoWrite` model to `TaskItem`/`TaskCreate`+`TaskUpdate` model
+- SQLite backend uses denormalized single-table design (no foreign keys, no transactions needed)
+- All 175+ tests rewritten for new data model
+
+### Removed
+- `TodoItem` struct and all `TodoWrite`-specific validation
+- `ValidateTodo()` and `ValidateTodos()` functions
+- Normalized SQLite `todos` table and foreign key relationships
+
 ## [1.0.1] - 2026-01-16
 
 ### Fixed

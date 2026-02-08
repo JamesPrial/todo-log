@@ -22,8 +22,7 @@ func UTCISOTimestamp() string {
 // BuildLogEntry constructs a LogEntry from the parsed hook input.
 //
 // Uses UnknownValue for empty session_id or cwd to ensure the log entry
-// always has valid values. Always initializes Todos as a non-nil empty slice
-// (which produces [] not null in JSON) to maintain consistent JSON output.
+// always has valid values.
 //
 // The returned LogEntry is ready to be passed to a storage backend's
 // AppendEntry method.
@@ -38,13 +37,14 @@ func BuildLogEntry(input *HookInput) storage.LogEntry {
 		cwd = UnknownValue
 	}
 
-	// Extract and validate todos from the raw tool input
-	todos := ValidateTodos(input.ToolInput)
+	// Extract task from the raw tool input
+	task := ParseTaskInput(input.ToolName, input.ToolInput)
 
 	return storage.LogEntry{
 		Timestamp: UTCISOTimestamp(),
 		SessionID: sessionID,
 		Cwd:       cwd,
-		Todos:     todos,
+		ToolName:  input.ToolName,
+		Task:      task,
 	}
 }

@@ -14,29 +14,24 @@ import (
 // Test helpers
 // ---------------------------------------------------------------------------
 
-// validTodoWriteJSON returns a well-formed TodoWrite JSON payload.
-func validTodoWriteJSON() string {
-	return `{"tool_name":"TodoWrite","tool_input":{"todos":[{"content":"Test task","status":"pending","activeForm":"Testing"}]},"session_id":"test-session","cwd":"/test"}`
+// validTaskCreateJSON returns a well-formed TaskCreate JSON payload.
+func validTaskCreateJSON() string {
+	return `{"tool_name":"TaskCreate","tool_input":{"subject":"Test task","description":"A test","activeForm":"Testing"},"session_id":"test-session","cwd":"/test"}`
 }
 
-// validTodoWriteMultipleTodosJSON returns a TodoWrite with multiple todos.
-func validTodoWriteMultipleTodosJSON() string {
-	return `{"tool_name":"TodoWrite","tool_input":{"todos":[{"content":"Task one","status":"pending","activeForm":"Doing one"},{"content":"Task two","status":"in_progress","activeForm":"Doing two"},{"content":"Task three","status":"completed","activeForm":"Done three"}]},"session_id":"multi-session","cwd":"/multi"}`
+// validTaskUpdateJSON returns a well-formed TaskUpdate JSON payload.
+func validTaskUpdateJSON() string {
+	return `{"tool_name":"TaskUpdate","tool_input":{"taskId":"1","status":"completed"},"session_id":"update-session","cwd":"/test"}`
 }
 
-// nonTodoWriteJSON returns a non-TodoWrite hook event.
-func nonTodoWriteJSON() string {
+// nonTaskToolJSON returns a non-task hook event.
+func nonTaskToolJSON() string {
 	return `{"tool_name":"Read","tool_input":{"file_path":"/test.txt"},"session_id":"s","cwd":"/"}`
 }
 
-// todoWriteEmptyTodosJSON returns a TodoWrite with an empty todos array.
-func todoWriteEmptyTodosJSON() string {
-	return `{"tool_name":"TodoWrite","tool_input":{"todos":[]},"session_id":"empty-session","cwd":"/empty"}`
-}
-
-// todoWriteNoSessionNoCwdJSON returns a TodoWrite without session_id and cwd.
-func todoWriteNoSessionNoCwdJSON() string {
-	return `{"tool_name":"TodoWrite","tool_input":{"todos":[{"content":"orphan task","status":"pending","activeForm":"Doing orphan"}]},"session_id":"","cwd":""}`
+// taskCreateNoSessionNoCwdJSON returns a TaskCreate without session_id and cwd.
+func taskCreateNoSessionNoCwdJSON() string {
+	return `{"tool_name":"TaskCreate","tool_input":{"subject":"orphan task","activeForm":"Doing orphan"},"session_id":"","cwd":""}`
 }
 
 // readJSONLogFile reads the JSON log file and returns parsed entries.
@@ -70,20 +65,26 @@ func Test_run_Cases(t *testing.T) {
 		verifyFile    func(t *testing.T, projectDir string)
 	}{
 		{
-			name:          "success TodoWrite exits 0",
-			stdin:         validTodoWriteJSON(),
+			name:          "success TaskCreate exits 0",
+			stdin:         validTaskCreateJSON(),
 			setProjectDir: true,
 			wantExitCode:  0,
 		},
 		{
-			name:          "non-TodoWrite exits 0 silently",
-			stdin:         nonTodoWriteJSON(),
+			name:          "success TaskUpdate exits 0",
+			stdin:         validTaskUpdateJSON(),
+			setProjectDir: true,
+			wantExitCode:  0,
+		},
+		{
+			name:          "non-task tool exits 0 silently",
+			stdin:         nonTaskToolJSON(),
 			setProjectDir: true,
 			wantExitCode:  0,
 		},
 		{
 			name:          "missing CLAUDE_PROJECT_DIR exits 1",
-			stdin:         validTodoWriteJSON(),
+			stdin:         validTaskCreateJSON(),
 			setProjectDir: false,
 			wantExitCode:  1,
 		},
@@ -101,31 +102,14 @@ func Test_run_Cases(t *testing.T) {
 		},
 		{
 			name:          "path escape exits 1",
-			stdin:         validTodoWriteJSON(),
+			stdin:         validTaskCreateJSON(),
 			setProjectDir: true,
 			envLogPath:    "../../../evil.json",
 			wantExitCode:  1,
 		},
 		{
-			name:          "empty todos logged successfully",
-			stdin:         todoWriteEmptyTodosJSON(),
-			setProjectDir: true,
-			wantExitCode:  0,
-			verifyFile: func(t *testing.T, projectDir string) {
-				t.Helper()
-				logPath := filepath.Join(projectDir, ".claude", "todos.json")
-				entries := readJSONLogFile(t, logPath)
-				if len(entries) != 1 {
-					t.Fatalf("expected 1 entry, got %d", len(entries))
-				}
-				if len(entries[0].Todos) != 0 {
-					t.Errorf("expected 0 todos, got %d", len(entries[0].Todos))
-				}
-			},
-		},
-		{
 			name:          "unknown values for missing session_id and cwd",
-			stdin:         todoWriteNoSessionNoCwdJSON(),
+			stdin:         taskCreateNoSessionNoCwdJSON(),
 			setProjectDir: true,
 			wantExitCode:  0,
 			verifyFile: func(t *testing.T, projectDir string) {
@@ -145,7 +129,7 @@ func Test_run_Cases(t *testing.T) {
 		},
 		{
 			name:          "custom log path creates file at custom location",
-			stdin:         validTodoWriteJSON(),
+			stdin:         validTaskCreateJSON(),
 			setProjectDir: true,
 			envLogPath:    ".claude/custom.json",
 			wantExitCode:  0,
@@ -220,7 +204,7 @@ func Test_run_FileCreatedWithCorrectContent(t *testing.T) {
 	t.Setenv("TODO_LOG_PATH", "")
 	t.Setenv("TODO_SQLITE_PATH", "")
 
-	stdin := strings.NewReader(validTodoWriteJSON())
+	stdin := strings.NewReader(validTaskCreateJSON())
 	exitCode := run(stdin)
 
 	if exitCode != 0 {
@@ -256,17 +240,17 @@ func Test_run_FileCreatedWithCorrectContent(t *testing.T) {
 	if entry.SessionID != "test-session" {
 		t.Errorf("entry SessionID = %q, want %q", entry.SessionID, "test-session")
 	}
-	if len(entry.Todos) != 1 {
-		t.Fatalf("expected 1 todo, got %d", len(entry.Todos))
+	if entry.ToolName != "TaskCreate" {
+		t.Errorf("entry ToolName = %q, want %q", entry.ToolName, "TaskCreate")
 	}
-	if entry.Todos[0].Content != "Test task" {
-		t.Errorf("todo Content = %q, want %q", entry.Todos[0].Content, "Test task")
+	if entry.Task.Subject != "Test task" {
+		t.Errorf("task Subject = %q, want %q", entry.Task.Subject, "Test task")
 	}
-	if entry.Todos[0].Status != "pending" {
-		t.Errorf("todo Status = %q, want %q", entry.Todos[0].Status, "pending")
+	if entry.Task.Status != "pending" {
+		t.Errorf("task Status = %q, want %q", entry.Task.Status, "pending")
 	}
-	if entry.Todos[0].ActiveForm != "Testing" {
-		t.Errorf("todo ActiveForm = %q, want %q", entry.Todos[0].ActiveForm, "Testing")
+	if entry.Task.ActiveForm != "Testing" {
+		t.Errorf("task ActiveForm = %q, want %q", entry.Task.ActiveForm, "Testing")
 	}
 }
 
@@ -283,7 +267,7 @@ func Test_run_MultipleCallsAccumulate(t *testing.T) {
 
 	const numCalls = 3
 	for i := 0; i < numCalls; i++ {
-		stdin := strings.NewReader(validTodoWriteJSON())
+		stdin := strings.NewReader(validTaskCreateJSON())
 		exitCode := run(stdin)
 		if exitCode != 0 {
 			t.Fatalf("run() call #%d exit code = %d, want 0", i+1, exitCode)
@@ -297,10 +281,10 @@ func Test_run_MultipleCallsAccumulate(t *testing.T) {
 		t.Fatalf("expected %d entries after %d calls, got %d", numCalls, numCalls, len(entries))
 	}
 
-	// Each entry should have the same content since we used the same input.
+	// Each entry should have task data since we used the same input.
 	for i, entry := range entries {
-		if len(entry.Todos) != 1 {
-			t.Errorf("entry[%d] has %d todos, want 1", i, len(entry.Todos))
+		if entry.Task.Subject != "Test task" {
+			t.Errorf("entry[%d] task.Subject = %q, want %q", i, entry.Task.Subject, "Test task")
 		}
 	}
 }
@@ -316,7 +300,7 @@ func Test_run_SQLiteBackend(t *testing.T) {
 	t.Setenv("TODO_LOG_PATH", "")
 	t.Setenv("TODO_SQLITE_PATH", "")
 
-	stdin := strings.NewReader(validTodoWriteJSON())
+	stdin := strings.NewReader(validTaskCreateJSON())
 	exitCode := run(stdin)
 
 	if exitCode != 0 {
@@ -344,23 +328,23 @@ func Test_run_SQLiteBackend(t *testing.T) {
 		t.Fatalf("expected 1 entry in SQLite, got %d", len(entries))
 	}
 
-	if entries[0].Todos[0].Content != "Test task" {
-		t.Errorf("todo Content = %q, want %q", entries[0].Todos[0].Content, "Test task")
+	if entries[0].Task.Subject != "Test task" {
+		t.Errorf("task Subject = %q, want %q", entries[0].Task.Subject, "Test task")
 	}
 }
 
 // ---------------------------------------------------------------------------
-// run(): non-TodoWrite produces no file
+// run(): non-task tool produces no file
 // ---------------------------------------------------------------------------
 
-func Test_run_NonTodoWrite_NoFileCreated(t *testing.T) {
+func Test_run_NonTaskTool_NoFileCreated(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Setenv("CLAUDE_PROJECT_DIR", projectDir)
 	t.Setenv("TODO_STORAGE_BACKEND", "")
 	t.Setenv("TODO_LOG_PATH", "")
 	t.Setenv("TODO_SQLITE_PATH", "")
 
-	stdin := strings.NewReader(nonTodoWriteJSON())
+	stdin := strings.NewReader(nonTaskToolJSON())
 	exitCode := run(stdin)
 
 	if exitCode != 0 {
@@ -369,22 +353,22 @@ func Test_run_NonTodoWrite_NoFileCreated(t *testing.T) {
 
 	logPath := filepath.Join(projectDir, ".claude", "todos.json")
 	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
-		t.Errorf("expected no file at %s for non-TodoWrite event, but file exists", logPath)
+		t.Errorf("expected no file at %s for non-task event, but file exists", logPath)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// run(): multiple todos in single call
+// run(): TaskUpdate in single call
 // ---------------------------------------------------------------------------
 
-func Test_run_MultipleTodosInSingleCall(t *testing.T) {
+func Test_run_TaskUpdateInSingleCall(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Setenv("CLAUDE_PROJECT_DIR", projectDir)
 	t.Setenv("TODO_STORAGE_BACKEND", "")
 	t.Setenv("TODO_LOG_PATH", "")
 	t.Setenv("TODO_SQLITE_PATH", "")
 
-	stdin := strings.NewReader(validTodoWriteMultipleTodosJSON())
+	stdin := strings.NewReader(validTaskUpdateJSON())
 	exitCode := run(stdin)
 
 	if exitCode != 0 {
@@ -398,15 +382,14 @@ func Test_run_MultipleTodosInSingleCall(t *testing.T) {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
 
-	if len(entries[0].Todos) != 3 {
-		t.Fatalf("expected 3 todos in entry, got %d", len(entries[0].Todos))
+	if entries[0].ToolName != "TaskUpdate" {
+		t.Errorf("ToolName = %q, want %q", entries[0].ToolName, "TaskUpdate")
 	}
-
-	expectedContents := []string{"Task one", "Task two", "Task three"}
-	for i, want := range expectedContents {
-		if entries[0].Todos[i].Content != want {
-			t.Errorf("todo[%d].Content = %q, want %q", i, entries[0].Todos[i].Content, want)
-		}
+	if entries[0].Task.ID != "1" {
+		t.Errorf("Task.ID = %q, want %q", entries[0].Task.ID, "1")
+	}
+	if entries[0].Task.Status != "completed" {
+		t.Errorf("Task.Status = %q, want %q", entries[0].Task.Status, "completed")
 	}
 }
 
@@ -423,7 +406,7 @@ func Test_run_SQLiteMultipleCallsAccumulate(t *testing.T) {
 
 	const numCalls = 3
 	for i := 0; i < numCalls; i++ {
-		stdin := strings.NewReader(validTodoWriteJSON())
+		stdin := strings.NewReader(validTaskCreateJSON())
 		exitCode := run(stdin)
 		if exitCode != 0 {
 			t.Fatalf("run() call #%d exit code = %d, want 0", i+1, exitCode)
@@ -456,7 +439,7 @@ func Test_run_WhitespaceProjectDir_Exits1(t *testing.T) {
 	t.Setenv("TODO_LOG_PATH", "")
 	t.Setenv("TODO_SQLITE_PATH", "")
 
-	stdin := strings.NewReader(validTodoWriteJSON())
+	stdin := strings.NewReader(validTaskCreateJSON())
 	exitCode := run(stdin)
 
 	if exitCode != 1 {
@@ -475,7 +458,7 @@ func Test_run_EntryHasTimestamp(t *testing.T) {
 	t.Setenv("TODO_LOG_PATH", "")
 	t.Setenv("TODO_SQLITE_PATH", "")
 
-	stdin := strings.NewReader(validTodoWriteJSON())
+	stdin := strings.NewReader(validTaskCreateJSON())
 	exitCode := run(stdin)
 
 	if exitCode != 0 {
@@ -516,7 +499,7 @@ func Test_run_UnknownBackend_Exits1(t *testing.T) {
 	t.Setenv("TODO_LOG_PATH", "")
 	t.Setenv("TODO_SQLITE_PATH", "")
 
-	stdin := strings.NewReader(validTodoWriteJSON())
+	stdin := strings.NewReader(validTaskCreateJSON())
 	exitCode := run(stdin)
 
 	if exitCode != 1 {
@@ -535,7 +518,7 @@ func Test_run_LogFileIsValidJSON(t *testing.T) {
 	t.Setenv("TODO_LOG_PATH", "")
 	t.Setenv("TODO_SQLITE_PATH", "")
 
-	stdin := strings.NewReader(validTodoWriteJSON())
+	stdin := strings.NewReader(validTaskCreateJSON())
 	exitCode := run(stdin)
 
 	if exitCode != 0 {
@@ -571,7 +554,7 @@ func Test_run_CreatesClaudeDirectory(t *testing.T) {
 		t.Fatalf(".claude directory already exists before test")
 	}
 
-	stdin := strings.NewReader(validTodoWriteJSON())
+	stdin := strings.NewReader(validTaskCreateJSON())
 	exitCode := run(stdin)
 
 	if exitCode != 0 {
@@ -592,17 +575,44 @@ func Test_run_CreatesClaudeDirectory(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// run(): TodoWrite is no longer accepted
+// ---------------------------------------------------------------------------
+
+func Test_run_TodoWriteIgnored(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv("CLAUDE_PROJECT_DIR", projectDir)
+	t.Setenv("TODO_STORAGE_BACKEND", "")
+	t.Setenv("TODO_LOG_PATH", "")
+	t.Setenv("TODO_SQLITE_PATH", "")
+
+	todoWriteJSON := `{"tool_name":"TodoWrite","tool_input":{"todos":[{"content":"task","status":"pending","activeForm":"Doing"}]},"session_id":"s","cwd":"/"}`
+	stdin := strings.NewReader(todoWriteJSON)
+	exitCode := run(stdin)
+
+	// TodoWrite should be silently ignored (return 0) since it's not in acceptedTools
+	if exitCode != 0 {
+		t.Errorf("run() exit code = %d, want 0 for ignored TodoWrite", exitCode)
+	}
+
+	// No file should be created
+	logPath := filepath.Join(projectDir, ".claude", "todos.json")
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Errorf("expected no file at %s for TodoWrite event, but file exists", logPath)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Benchmark
 // ---------------------------------------------------------------------------
 
-func Benchmark_run_TodoWrite(b *testing.B) {
+func Benchmark_run_TaskCreate(b *testing.B) {
 	projectDir := b.TempDir()
 	b.Setenv("CLAUDE_PROJECT_DIR", projectDir)
 	b.Setenv("TODO_STORAGE_BACKEND", "json")
 	b.Setenv("TODO_LOG_PATH", "")
 	b.Setenv("TODO_SQLITE_PATH", "")
 
-	input := validTodoWriteJSON()
+	input := validTaskCreateJSON()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -614,14 +624,14 @@ func Benchmark_run_TodoWrite(b *testing.B) {
 	}
 }
 
-func Benchmark_run_NonTodoWrite(b *testing.B) {
+func Benchmark_run_NonTaskTool(b *testing.B) {
 	projectDir := b.TempDir()
 	b.Setenv("CLAUDE_PROJECT_DIR", projectDir)
 	b.Setenv("TODO_STORAGE_BACKEND", "")
 	b.Setenv("TODO_LOG_PATH", "")
 	b.Setenv("TODO_SQLITE_PATH", "")
 
-	input := nonTodoWriteJSON()
+	input := nonTaskToolJSON()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

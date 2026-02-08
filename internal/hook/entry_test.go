@@ -71,73 +71,91 @@ func Test_BuildLogEntry(t *testing.T) {
 		input         *HookInput
 		wantSessionID string
 		wantCwd       string
-		wantTodoCount int
+		wantToolName  string
+		wantSubject   string
+		wantStatus    string
 	}{
 		{
-			name: "valid input populates all fields",
+			name: "TaskCreate populates all fields",
 			input: &HookInput{
+				ToolName:  "TaskCreate",
 				SessionID: "s1",
 				Cwd:       "/tmp",
-				ToolInput: json.RawMessage(`{"todos":[{"content":"task","status":"pending","activeForm":"Doing"}]}`),
+				ToolInput: json.RawMessage(`{"subject":"Write tests","description":"desc","activeForm":"Writing"}`),
 			},
 			wantSessionID: "s1",
 			wantCwd:       "/tmp",
-			wantTodoCount: 1,
+			wantToolName:  "TaskCreate",
+			wantSubject:   "Write tests",
+			wantStatus:    "pending",
+		},
+		{
+			name: "TaskUpdate populates all fields",
+			input: &HookInput{
+				ToolName:  "TaskUpdate",
+				SessionID: "s2",
+				Cwd:       "/home",
+				ToolInput: json.RawMessage(`{"taskId":"1","status":"completed"}`),
+			},
+			wantSessionID: "s2",
+			wantCwd:       "/home",
+			wantToolName:  "TaskUpdate",
+			wantStatus:    "completed",
 		},
 		{
 			name: "missing session_id defaults to unknown",
 			input: &HookInput{
+				ToolName:  "TaskCreate",
 				SessionID: "",
 				Cwd:       "/tmp",
-				ToolInput: json.RawMessage(`{"todos":[]}`),
+				ToolInput: json.RawMessage(`{"subject":"task"}`),
 			},
 			wantSessionID: UnknownValue,
 			wantCwd:       "/tmp",
-			wantTodoCount: 0,
+			wantToolName:  "TaskCreate",
+			wantSubject:   "task",
+			wantStatus:    "pending",
 		},
 		{
 			name: "missing cwd defaults to unknown",
 			input: &HookInput{
+				ToolName:  "TaskCreate",
 				SessionID: "s1",
 				Cwd:       "",
-				ToolInput: json.RawMessage(`{"todos":[]}`),
+				ToolInput: json.RawMessage(`{"subject":"task"}`),
 			},
 			wantSessionID: "s1",
 			wantCwd:       UnknownValue,
-			wantTodoCount: 0,
+			wantToolName:  "TaskCreate",
+			wantSubject:   "task",
+			wantStatus:    "pending",
 		},
 		{
 			name: "both session_id and cwd missing default to unknown",
 			input: &HookInput{
+				ToolName:  "TaskCreate",
 				SessionID: "",
 				Cwd:       "",
-				ToolInput: json.RawMessage(`{"todos":[]}`),
+				ToolInput: json.RawMessage(`{"subject":"task"}`),
 			},
 			wantSessionID: UnknownValue,
 			wantCwd:       UnknownValue,
-			wantTodoCount: 0,
+			wantToolName:  "TaskCreate",
+			wantSubject:   "task",
+			wantStatus:    "pending",
 		},
 		{
-			name: "nil ToolInput produces empty todos slice",
+			name: "nil ToolInput produces default task",
 			input: &HookInput{
+				ToolName:  "TaskCreate",
 				SessionID: "s1",
 				Cwd:       "/tmp",
 				ToolInput: nil,
 			},
 			wantSessionID: "s1",
 			wantCwd:       "/tmp",
-			wantTodoCount: 0,
-		},
-		{
-			name: "filters invalid todos from mixed input",
-			input: &HookInput{
-				SessionID: "s1",
-				Cwd:       "/tmp",
-				ToolInput: json.RawMessage(`{"todos":[{"content":"task","status":"pending","activeForm":"Doing"},{"content":"only content"}]}`),
-			},
-			wantSessionID: "s1",
-			wantCwd:       "/tmp",
-			wantTodoCount: 1,
+			wantToolName:  "TaskCreate",
+			wantStatus:    "pending",
 		},
 	}
 
@@ -164,34 +182,18 @@ func Test_BuildLogEntry(t *testing.T) {
 				t.Errorf("BuildLogEntry() Cwd = %q, want %q", got.Cwd, tt.wantCwd)
 			}
 
-			// Todos must never be nil
-			if got.Todos == nil {
-				t.Fatal("BuildLogEntry() Todos is nil, expected non-nil slice")
+			if got.ToolName != tt.wantToolName {
+				t.Errorf("BuildLogEntry() ToolName = %q, want %q", got.ToolName, tt.wantToolName)
 			}
 
-			if len(got.Todos) != tt.wantTodoCount {
-				t.Errorf("BuildLogEntry() Todos count = %d, want %d", len(got.Todos), tt.wantTodoCount)
+			if got.Task.Subject != tt.wantSubject {
+				t.Errorf("BuildLogEntry() Task.Subject = %q, want %q", got.Task.Subject, tt.wantSubject)
+			}
+
+			if got.Task.Status != tt.wantStatus {
+				t.Errorf("BuildLogEntry() Task.Status = %q, want %q", got.Task.Status, tt.wantStatus)
 			}
 		})
-	}
-}
-
-func Test_BuildLogEntry_TodosAlwaysNonNil(t *testing.T) {
-	t.Parallel()
-
-	// Test multiple edge cases to ensure Todos is never nil
-	inputs := []*HookInput{
-		{SessionID: "s", Cwd: "/", ToolInput: nil},
-		{SessionID: "s", Cwd: "/", ToolInput: json.RawMessage(`{}`)},
-		{SessionID: "s", Cwd: "/", ToolInput: json.RawMessage(`{"todos":[]}`)},
-		{SessionID: "s", Cwd: "/", ToolInput: json.RawMessage(`{bad`)},
-	}
-
-	for _, input := range inputs {
-		entry := BuildLogEntry(input)
-		if entry.Todos == nil {
-			t.Errorf("BuildLogEntry() with ToolInput=%s returned nil Todos", string(input.ToolInput))
-		}
 	}
 }
 
@@ -203,29 +205,28 @@ func Test_UnknownValue_Constant(t *testing.T) {
 	}
 }
 
-func Test_BuildLogEntry_ValidTodosContent(t *testing.T) {
+func Test_BuildLogEntry_TaskCreateContent(t *testing.T) {
 	t.Parallel()
 
 	input := &HookInput{
+		ToolName:  "TaskCreate",
 		SessionID: "sess1",
 		Cwd:       "/project",
-		ToolInput: json.RawMessage(`{"todos":[{"content":"write tests","status":"in_progress","activeForm":"Writing tests"}]}`),
+		ToolInput: json.RawMessage(`{"subject":"write tests","description":"Unit tests for parser","activeForm":"Writing tests"}`),
 	}
 
 	entry := BuildLogEntry(input)
 
-	if len(entry.Todos) != 1 {
-		t.Fatalf("BuildLogEntry() Todos count = %d, want 1", len(entry.Todos))
+	if entry.Task.Subject != "write tests" {
+		t.Errorf("Task.Subject = %q, want %q", entry.Task.Subject, "write tests")
 	}
-
-	todo := entry.Todos[0]
-	if todo.Content != "write tests" {
-		t.Errorf("todo.Content = %q, want %q", todo.Content, "write tests")
+	if entry.Task.Description != "Unit tests for parser" {
+		t.Errorf("Task.Description = %q, want %q", entry.Task.Description, "Unit tests for parser")
 	}
-	if todo.Status != "in_progress" {
-		t.Errorf("todo.Status = %q, want %q", todo.Status, "in_progress")
+	if entry.Task.Status != "pending" {
+		t.Errorf("Task.Status = %q, want %q", entry.Task.Status, "pending")
 	}
-	if todo.ActiveForm != "Writing tests" {
-		t.Errorf("todo.ActiveForm = %q, want %q", todo.ActiveForm, "Writing tests")
+	if entry.Task.ActiveForm != "Writing tests" {
+		t.Errorf("Task.ActiveForm = %q, want %q", entry.Task.ActiveForm, "Writing tests")
 	}
 }

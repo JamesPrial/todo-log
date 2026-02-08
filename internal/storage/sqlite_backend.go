@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,37 +12,35 @@ import (
 
 // schemaDDL defines the database schema for the SQLite backend.
 //
-// This schema matches the Python implementation exactly, using:
-// - log_entries table for session metadata (timestamp, session_id, cwd)
-// - todos table for individual todo items linked via entry_id foreign key
-// - Indexes on session_id and status for efficient querying
+// Uses a single log_entries table with embedded task fields.
+// Array fields (blocks, blocked_by) and metadata are stored as JSON text.
 const schemaDDL = `
 CREATE TABLE IF NOT EXISTS log_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
     session_id TEXT NOT NULL,
-    cwd TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS todos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    entry_id INTEGER NOT NULL,
-    content TEXT NOT NULL,
-    status TEXT NOT NULL,
-    active_form TEXT NOT NULL,
-    FOREIGN KEY (entry_id) REFERENCES log_entries(id) ON DELETE CASCADE
+    cwd TEXT NOT NULL,
+    tool_name TEXT NOT NULL DEFAULT '',
+    task_id TEXT NOT NULL DEFAULT '',
+    subject TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    active_form TEXT NOT NULL DEFAULT '',
+    owner TEXT NOT NULL DEFAULT '',
+    blocks TEXT NOT NULL DEFAULT '[]',
+    blocked_by TEXT NOT NULL DEFAULT '[]',
+    metadata TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX IF NOT EXISTS idx_entries_session ON log_entries(session_id);
-CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
+CREATE INDEX IF NOT EXISTS idx_entries_status ON log_entries(status);
 `
 
 // SQLiteBackend implements both StorageBackend and QueryableStorageBackend using SQLite.
 //
-// This backend provides a normalized relational storage model with query capabilities.
-// Each method opens and closes its own database connection for simplicity, matching
-// the Python implementation. Uses WAL mode for better concurrent access and foreign
-// keys for referential integrity.
+// This backend provides a denormalized storage model with query capabilities.
+// Each log entry contains the full task data inline. Uses WAL mode for
+// better concurrent access.
 type SQLiteBackend struct {
 	// DBPath is the absolute path to the SQLite database file.
 	DBPath string
@@ -69,7 +68,6 @@ func NewSQLiteBackend(dbPath string) (*SQLiteBackend, error) {
 //
 // Creates parent directories if needed. Configures the connection for:
 // - WAL (Write-Ahead Logging) journal mode for better concurrent access
-// - Foreign key constraints enabled for referential integrity
 //
 // Returns an error if directory creation, database opening, or pragma execution fails.
 func (b *SQLiteBackend) connect() (*sql.DB, error) {
@@ -89,12 +87,6 @@ func (b *SQLiteBackend) connect() (*sql.DB, error) {
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to set WAL mode: %w", err)
-	}
-
-	// Enable foreign key constraints
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
 	return db, nil
@@ -122,9 +114,7 @@ func (b *SQLiteBackend) ensureSchema() error {
 
 // LoadHistory loads all log entries from the database.
 //
-// Returns entries in chronological order (by log entry ID). Each entry's Todos
-// slice is initialized as an empty slice (never nil), even for entries with no
-// associated todos (e.g., from LEFT JOIN results).
+// Returns entries in chronological order (by log entry ID).
 //
 // Returns an error if database connection or query execution fails.
 func (b *SQLiteBackend) LoadHistory() ([]LogEntry, error) {
@@ -135,10 +125,11 @@ func (b *SQLiteBackend) LoadHistory() ([]LogEntry, error) {
 	defer func() { _ = db.Close() }()
 
 	query := `
-		SELECT e.id, e.timestamp, e.session_id, e.cwd, t.content, t.status, t.active_form
-		FROM log_entries e
-		LEFT JOIN todos t ON e.id = t.entry_id
-		ORDER BY e.id, t.id
+		SELECT timestamp, session_id, cwd, tool_name,
+		       task_id, subject, description, status, active_form, owner,
+		       blocks, blocked_by, metadata
+		FROM log_entries
+		ORDER BY id
 	`
 
 	rows, err := db.Query(query)
@@ -147,57 +138,36 @@ func (b *SQLiteBackend) LoadHistory() ([]LogEntry, error) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	// Use ordered map pattern to group todos by entry
-	entryMap := make(map[int64]*LogEntry)
-	entryOrder := make([]int64, 0)
-
+	result := make([]LogEntry, 0)
 	for rows.Next() {
-		var (
-			entryID    int64
-			timestamp  string
-			sessionID  string
-			cwd        string
-			content    sql.NullString
-			status     sql.NullString
-			activeForm sql.NullString
-		)
+		var entry LogEntry
+		var blocksJSON, blockedByJSON, metadataJSON string
 
-		if err := rows.Scan(&entryID, &timestamp, &sessionID, &cwd, &content, &status, &activeForm); err != nil {
+		if err := rows.Scan(
+			&entry.Timestamp, &entry.SessionID, &entry.Cwd, &entry.ToolName,
+			&entry.Task.ID, &entry.Task.Subject, &entry.Task.Description,
+			&entry.Task.Status, &entry.Task.ActiveForm, &entry.Task.Owner,
+			&blocksJSON, &blockedByJSON, &metadataJSON,
+		); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		// Create entry if first time seeing this entryID
-		entry, exists := entryMap[entryID]
-		if !exists {
-			entry = &LogEntry{
-				Timestamp: timestamp,
-				SessionID: sessionID,
-				Cwd:       cwd,
-				Todos:     make([]TodoItem, 0),
-			}
-			entryMap[entryID] = entry
-			entryOrder = append(entryOrder, entryID)
+		// Parse JSON array fields
+		if blocksJSON != "[]" && blocksJSON != "" {
+			_ = json.Unmarshal([]byte(blocksJSON), &entry.Task.Blocks)
+		}
+		if blockedByJSON != "[]" && blockedByJSON != "" {
+			_ = json.Unmarshal([]byte(blockedByJSON), &entry.Task.BlockedBy)
+		}
+		if metadataJSON != "{}" && metadataJSON != "" {
+			_ = json.Unmarshal([]byte(metadataJSON), &entry.Task.Metadata)
 		}
 
-		// Add todo if present (LEFT JOIN can produce NULL todo fields)
-		if content.Valid {
-			todo := TodoItem{
-				Content:    content.String,
-				Status:     status.String,
-				ActiveForm: activeForm.String,
-			}
-			entry.Todos = append(entry.Todos, todo)
-		}
+		result = append(result, entry)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating rows: %w", err)
-	}
-
-	// Build result in original order
-	result := make([]LogEntry, 0, len(entryOrder))
-	for _, id := range entryOrder {
-		result = append(result, *entryMap[id])
 	}
 
 	return result, nil
@@ -205,59 +175,50 @@ func (b *SQLiteBackend) LoadHistory() ([]LogEntry, error) {
 
 // AppendEntry atomically appends a new entry to the database.
 //
-// Inserts the log entry and all associated todos in a single transaction.
-// Ensures entry.Todos is never nil (uses empty slice if nil).
+// Serializes array and map fields as JSON text for storage.
 //
-// Returns an error if connection, transaction, insert, or commit fails.
-// Automatically rolls back the transaction on any error.
+// Returns an error if connection or insert fails.
 func (b *SQLiteBackend) AppendEntry(entry LogEntry) error {
-	// Ensure Todos is never nil
-	if entry.Todos == nil {
-		entry.Todos = make([]TodoItem, 0)
-	}
-
 	db, err := b.connect()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	// Begin transaction
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	// Insert log entry
-	result, err := tx.Exec(
-		"INSERT INTO log_entries (timestamp, session_id, cwd) VALUES (?, ?, ?)",
-		entry.Timestamp, entry.SessionID, entry.Cwd,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to insert log entry: %w", err)
-	}
-
-	// Get the entry ID
-	entryID, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("failed to get last insert ID: %w", err)
-	}
-
-	// Insert todos
-	for _, todo := range entry.Todos {
-		_, err := tx.Exec(
-			"INSERT INTO todos (entry_id, content, status, active_form) VALUES (?, ?, ?, ?)",
-			entryID, todo.Content, todo.Status, todo.ActiveForm,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to insert todo: %w", err)
+	// Serialize array/map fields to JSON
+	blocksJSON := "[]"
+	if len(entry.Task.Blocks) > 0 {
+		if data, err := json.Marshal(entry.Task.Blocks); err == nil {
+			blocksJSON = string(data)
 		}
 	}
 
-	// Commit transaction
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+	blockedByJSON := "[]"
+	if len(entry.Task.BlockedBy) > 0 {
+		if data, err := json.Marshal(entry.Task.BlockedBy); err == nil {
+			blockedByJSON = string(data)
+		}
+	}
+
+	metadataJSON := "{}"
+	if len(entry.Task.Metadata) > 0 {
+		if data, err := json.Marshal(entry.Task.Metadata); err == nil {
+			metadataJSON = string(data)
+		}
+	}
+
+	_, err = db.Exec(
+		`INSERT INTO log_entries (timestamp, session_id, cwd, tool_name,
+		    task_id, subject, description, status, active_form, owner,
+		    blocks, blocked_by, metadata)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		entry.Timestamp, entry.SessionID, entry.Cwd, entry.ToolName,
+		entry.Task.ID, entry.Task.Subject, entry.Task.Description,
+		entry.Task.Status, entry.Task.ActiveForm, entry.Task.Owner,
+		blocksJSON, blockedByJSON, metadataJSON,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert log entry: %w", err)
 	}
 
 	return nil
@@ -266,8 +227,7 @@ func (b *SQLiteBackend) AppendEntry(entry LogEntry) error {
 // GetEntriesBySession retrieves all log entries for a specific session.
 //
 // Returns entries in chronological order (by log entry ID) that match the
-// given session_id. Each entry's Todos slice is initialized as an empty
-// slice (never nil), even for entries with no associated todos.
+// given session_id.
 //
 // Returns an empty slice if no entries match the session_id.
 // Returns an error if database connection or query execution fails.
@@ -279,11 +239,12 @@ func (b *SQLiteBackend) GetEntriesBySession(sessionID string) ([]LogEntry, error
 	defer func() { _ = db.Close() }()
 
 	query := `
-		SELECT e.id, e.timestamp, e.session_id, e.cwd, t.content, t.status, t.active_form
-		FROM log_entries e
-		LEFT JOIN todos t ON e.id = t.entry_id
-		WHERE e.session_id = ?
-		ORDER BY e.id, t.id
+		SELECT timestamp, session_id, cwd, tool_name,
+		       task_id, subject, description, status, active_form, owner,
+		       blocks, blocked_by, metadata
+		FROM log_entries
+		WHERE session_id = ?
+		ORDER BY id
 	`
 
 	rows, err := db.Query(query, sessionID)
@@ -292,69 +253,47 @@ func (b *SQLiteBackend) GetEntriesBySession(sessionID string) ([]LogEntry, error
 	}
 	defer func() { _ = rows.Close() }()
 
-	// Use ordered map pattern to group todos by entry
-	entryMap := make(map[int64]*LogEntry)
-	entryOrder := make([]int64, 0)
-
+	result := make([]LogEntry, 0)
 	for rows.Next() {
-		var (
-			entryID         int64
-			timestamp       string
-			sessionIDResult string
-			cwd             string
-			content         sql.NullString
-			status          sql.NullString
-			activeForm      sql.NullString
-		)
+		var entry LogEntry
+		var blocksJSON, blockedByJSON, metadataJSON string
 
-		if err := rows.Scan(&entryID, &timestamp, &sessionIDResult, &cwd, &content, &status, &activeForm); err != nil {
+		if err := rows.Scan(
+			&entry.Timestamp, &entry.SessionID, &entry.Cwd, &entry.ToolName,
+			&entry.Task.ID, &entry.Task.Subject, &entry.Task.Description,
+			&entry.Task.Status, &entry.Task.ActiveForm, &entry.Task.Owner,
+			&blocksJSON, &blockedByJSON, &metadataJSON,
+		); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		// Create entry if first time seeing this entryID
-		entry, exists := entryMap[entryID]
-		if !exists {
-			entry = &LogEntry{
-				Timestamp: timestamp,
-				SessionID: sessionIDResult,
-				Cwd:       cwd,
-				Todos:     make([]TodoItem, 0),
-			}
-			entryMap[entryID] = entry
-			entryOrder = append(entryOrder, entryID)
+		if blocksJSON != "[]" && blocksJSON != "" {
+			_ = json.Unmarshal([]byte(blocksJSON), &entry.Task.Blocks)
+		}
+		if blockedByJSON != "[]" && blockedByJSON != "" {
+			_ = json.Unmarshal([]byte(blockedByJSON), &entry.Task.BlockedBy)
+		}
+		if metadataJSON != "{}" && metadataJSON != "" {
+			_ = json.Unmarshal([]byte(metadataJSON), &entry.Task.Metadata)
 		}
 
-		// Add todo if present (LEFT JOIN can produce NULL todo fields)
-		if content.Valid {
-			todo := TodoItem{
-				Content:    content.String,
-				Status:     status.String,
-				ActiveForm: activeForm.String,
-			}
-			entry.Todos = append(entry.Todos, todo)
-		}
+		result = append(result, entry)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating rows: %w", err)
 	}
 
-	// Build result in original order
-	result := make([]LogEntry, 0, len(entryOrder))
-	for _, id := range entryOrder {
-		result = append(result, *entryMap[id])
-	}
-
 	return result, nil
 }
 
-// GetTodosByStatus retrieves all todos with a specific status across all entries.
+// GetTasksByStatus retrieves all tasks with a specific status across all entries.
 //
-// Returns todos in order by their ID that match the given status.
-// Returns an empty slice if no todos match the status.
+// Returns tasks in order by their entry ID that match the given status.
+// Returns an empty slice if no tasks match the status.
 //
 // Returns an error if database connection or query execution fails.
-func (b *SQLiteBackend) GetTodosByStatus(status string) ([]TodoItem, error) {
+func (b *SQLiteBackend) GetTasksByStatus(status string) ([]TaskItem, error) {
 	db, err := b.connect()
 	if err != nil {
 		return nil, err
@@ -362,25 +301,43 @@ func (b *SQLiteBackend) GetTodosByStatus(status string) ([]TodoItem, error) {
 	defer func() { _ = db.Close() }()
 
 	query := `
-		SELECT content, status, active_form
-		FROM todos
+		SELECT task_id, subject, description, status, active_form, owner,
+		       blocks, blocked_by, metadata
+		FROM log_entries
 		WHERE status = ?
 		ORDER BY id
 	`
 
 	rows, err := db.Query(query, status)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query todos by status: %w", err)
+		return nil, fmt.Errorf("failed to query tasks by status: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	result := make([]TodoItem, 0)
+	result := make([]TaskItem, 0)
 	for rows.Next() {
-		var todo TodoItem
-		if err := rows.Scan(&todo.Content, &todo.Status, &todo.ActiveForm); err != nil {
-			return nil, fmt.Errorf("failed to scan todo: %w", err)
+		var task TaskItem
+		var blocksJSON, blockedByJSON, metadataJSON string
+
+		if err := rows.Scan(
+			&task.ID, &task.Subject, &task.Description,
+			&task.Status, &task.ActiveForm, &task.Owner,
+			&blocksJSON, &blockedByJSON, &metadataJSON,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan task: %w", err)
 		}
-		result = append(result, todo)
+
+		if blocksJSON != "[]" && blocksJSON != "" {
+			_ = json.Unmarshal([]byte(blocksJSON), &task.Blocks)
+		}
+		if blockedByJSON != "[]" && blockedByJSON != "" {
+			_ = json.Unmarshal([]byte(blockedByJSON), &task.BlockedBy)
+		}
+		if metadataJSON != "{}" && metadataJSON != "" {
+			_ = json.Unmarshal([]byte(metadataJSON), &task.Metadata)
+		}
+
+		result = append(result, task)
 	}
 
 	if err := rows.Err(); err != nil {

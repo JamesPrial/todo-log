@@ -1,10 +1,10 @@
 // Package main implements the save-todos hook for Claude Code's todo-log plugin.
 //
 // This program reads PostToolUse hook events from stdin (JSON format), validates
-// TodoWrite events, and appends them to the configured storage backend (JSON or SQLite).
+// TaskCreate/TaskUpdate events, and appends them to the configured storage backend.
 //
 // Exit codes:
-//   - 0: Success (todos saved or non-TodoWrite event ignored)
+//   - 0: Success (task saved or non-task event ignored)
 //   - 1: Error (invalid input, missing environment variable, storage failure)
 //
 // Environment variables:
@@ -31,7 +31,7 @@ import (
 //
 // Process flow:
 //  1. Read and parse hook input from stdin
-//  2. Return 0 if not a TodoWrite event (silently ignore)
+//  2. Return 0 if not a TaskCreate/TaskUpdate event (silently ignore)
 //  3. Get CLAUDE_PROJECT_DIR environment variable
 //  4. Build log entry from validated hook input
 //  5. Get storage backend (JSON or SQLite)
@@ -49,7 +49,7 @@ func run(stdin io.Reader) int {
 		return 1
 	}
 
-	// Step 2: If not a TodoWrite event, silently ignore (return 0)
+	// Step 2: If not a task event, silently ignore (return 0)
 	if input == nil {
 		return 0
 	}
@@ -83,8 +83,7 @@ func run(stdin io.Reader) int {
 		backendType = "json"
 	}
 
-	todoCount := len(entry.Todos)
-	fmt.Printf("Saved %d todos (%s backend)\n", todoCount, backendType)
+	fmt.Printf("Saved %s task (%s backend)\n", input.ToolName, backendType)
 	return 0
 }
 

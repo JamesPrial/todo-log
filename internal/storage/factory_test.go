@@ -230,9 +230,6 @@ func Test_GetStorageBackend_DefaultJSONPath(t *testing.T) {
 		t.Fatalf("expected *JSONBackend, got %T", backend)
 	}
 
-	// The default JSON path should be <projectDir>/.claude/todos.json.
-	// On macOS, t.TempDir() may resolve to /private/var/... via symlinks,
-	// so we compare against the resolved projectDir.
 	wantSuffix := filepath.Join(".claude", "todos.json")
 	if !strings.HasSuffix(jsonBackend.LogFile, wantSuffix) {
 		t.Errorf("JSONBackend.LogFile = %q, want it to end with %q", jsonBackend.LogFile, wantSuffix)
@@ -322,7 +319,6 @@ func Test_GetStorageBackend_JSONImplementsStorageBackend(t *testing.T) {
 		t.Fatalf("GetStorageBackend() unexpected error: %v", err)
 	}
 
-	// The returned value should satisfy the StorageBackend interface.
 	_ = backend
 }
 
@@ -376,8 +372,11 @@ func Test_GetStorageBackend_JSONBackend_Functional(t *testing.T) {
 		Timestamp: "2025-01-01T00:00:00.000Z",
 		SessionID: "factory-test-session",
 		Cwd:       "/test",
-		Todos: []storage.TodoItem{
-			{Content: "factory task", Status: "pending", ActiveForm: "Testing factory"},
+		ToolName:  "TaskCreate",
+		Task: storage.TaskItem{
+			Subject:    "factory task",
+			Status:     "pending",
+			ActiveForm: "Testing factory",
 		},
 	}
 
@@ -394,8 +393,8 @@ func Test_GetStorageBackend_JSONBackend_Functional(t *testing.T) {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
 
-	if entries[0].Todos[0].Content != "factory task" {
-		t.Errorf("entry content = %q, want %q", entries[0].Todos[0].Content, "factory task")
+	if entries[0].Task.Subject != "factory task" {
+		t.Errorf("entry subject = %q, want %q", entries[0].Task.Subject, "factory task")
 	}
 }
 
@@ -414,8 +413,11 @@ func Test_GetStorageBackend_SQLiteBackend_Functional(t *testing.T) {
 		Timestamp: "2025-01-01T00:00:00.000Z",
 		SessionID: "factory-test-session",
 		Cwd:       "/test",
-		Todos: []storage.TodoItem{
-			{Content: "sqlite factory task", Status: "pending", ActiveForm: "Testing sqlite factory"},
+		ToolName:  "TaskCreate",
+		Task: storage.TaskItem{
+			Subject:    "sqlite factory task",
+			Status:     "pending",
+			ActiveForm: "Testing sqlite factory",
 		},
 	}
 
@@ -432,8 +434,8 @@ func Test_GetStorageBackend_SQLiteBackend_Functional(t *testing.T) {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
 
-	if entries[0].Todos[0].Content != "sqlite factory task" {
-		t.Errorf("entry content = %q, want %q", entries[0].Todos[0].Content, "sqlite factory task")
+	if entries[0].Task.Subject != "sqlite factory task" {
+		t.Errorf("entry subject = %q, want %q", entries[0].Task.Subject, "sqlite factory task")
 	}
 }
 

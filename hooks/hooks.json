@@ -1,9 +1,9 @@
 {
-  "description": "Capture TodoWrite tool usage and save to timestamped history",
+  "description": "Capture TaskCreate/TaskUpdate tool usage and save to timestamped history",
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "TodoWrite",
+        "matcher": "TaskCreate|TaskUpdate",
         "hooks": [
           {
             "type": "command",

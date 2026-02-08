@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is the **todo-log** plugin for Claude Code. Written in Go for compiled binary distribution. It automatically logs TodoWrite tool usage using a PostToolUse hook. Supports both JSON file and SQLite database backends.
+This is the **todo-log** plugin for Claude Code. Written in Go for compiled binary distribution. It automatically logs TaskCreate/TaskUpdate tool usage using a PostToolUse hook. Supports both JSON file and SQLite database backends.
 
 ## Development Commands
 
@@ -32,7 +32,7 @@ make clean
 2. Rebuild: `make build`
 3. Uninstall: `/plugin uninstall todo-log`
 4. Reinstall: `/plugin install todo-log@<marketplace-name>`
-5. Trigger TodoWrite in Claude Code
+5. Trigger TaskCreate/TaskUpdate in Claude Code
 6. Check `.claude/todos.json` or use `claude --debug` for hook output
 
 ## Architecture
@@ -40,26 +40,26 @@ make clean
 ### Hook Flow
 
 ```
-TodoWrite tool invoked
+TaskCreate/TaskUpdate tool invoked
     ↓
 PostToolUse event fires
     ↓
-hooks.json matches "TodoWrite" → runs bin/save-todos
+hooks.json matches "TaskCreate|TaskUpdate" → runs bin/save-todos
     ↓
-save-todos: reads stdin JSON → validates todos → appends to storage backend
+save-todos: reads stdin JSON → parses task input → appends to storage backend
 ```
 
 ### Key Files
 
-- `hooks/hooks.json` - Hook configuration (PostToolUse on TodoWrite)
+- `hooks/hooks.json` - Hook configuration (PostToolUse on TaskCreate|TaskUpdate)
 - `cmd/save-todos/main.go` - CLI entry point (`run(stdin io.Reader) int`)
 - `internal/hook/` - Hook input processing
-  - `input.go` - Stdin JSON parsing, todo validation
+  - `input.go` - Stdin JSON parsing, TaskCreate/TaskUpdate input mapping
   - `entry.go` - LogEntry construction, timestamps
 - `internal/pathutil/` - Security utilities
   - `safepath.go` - Path traversal protection
 - `internal/storage/` - Storage backend package
-  - `types.go` - TodoItem, LogEntry structs, StorageBackend interface
+  - `types.go` - TaskItem, LogEntry structs, StorageBackend interface
   - `factory.go` - Backend factory (`GetStorageBackend`)
   - `json_backend.go` - JSON file storage backend
   - `sqlite_backend.go` - SQLite database backend with query support
@@ -103,14 +103,14 @@ Binary distribution uses a **releases branch strategy**:
 - Good for simple use cases
 
 **SQLite Backend**:
-- Normalized tables: `log_entries` and `todos`
-- Query methods: `GetEntriesBySession()`, `GetTodosByStatus()`
+- Denormalized single `log_entries` table with inline task fields
+- Query methods: `GetEntriesBySession()`, `GetTasksByStatus()`
 - WAL mode for concurrent access
 - Better for querying and large datasets
 
 ### Exit Codes
 
-- `0`: Success (or non-TodoWrite event, ignored)
+- `0`: Success (or non-TaskCreate/TaskUpdate event, ignored)
 - `1`: Error (missing env var, file I/O failure, path escape attempt)
 
 ### Security
@@ -127,9 +127,13 @@ Binary distribution uses a **releases branch strategy**:
   "timestamp": "2025-11-14T10:30:45.123Z",
   "session_id": "abc123def456",
   "cwd": "/home/user/project",
-  "todos": [
-    {"content": "Task", "status": "pending", "activeForm": "Doing task"}
-  ]
+  "tool_name": "TaskCreate",
+  "task": {
+    "subject": "Implement feature",
+    "description": "Details here",
+    "status": "pending",
+    "activeForm": "Implementing feature"
+  }
 }
 ```
 

@@ -16,31 +16,60 @@ func Test_ReadHookInput(t *testing.T) {
 		input      string
 		wantNil    bool
 		wantErr    bool
+		wantTool   string
 		wantSessID string
 		wantCwd    string
 	}{
 		{
-			name:       "valid TodoWrite event returns non-nil HookInput",
-			input:      `{"tool_name":"TodoWrite","tool_input":{"todos":[]},"session_id":"s1","cwd":"/tmp"}`,
+			name:       "valid TaskCreate event returns non-nil HookInput",
+			input:      `{"tool_name":"TaskCreate","tool_input":{"subject":"Test","description":"desc","activeForm":"Testing"},"session_id":"s1","cwd":"/tmp"}`,
 			wantNil:    false,
 			wantErr:    false,
+			wantTool:   "TaskCreate",
 			wantSessID: "s1",
 			wantCwd:    "/tmp",
 		},
 		{
-			name:    "non-TodoWrite tool returns nil nil",
+			name:       "valid TaskUpdate event returns non-nil HookInput",
+			input:      `{"tool_name":"TaskUpdate","tool_input":{"taskId":"1","status":"completed"},"session_id":"s2","cwd":"/home"}`,
+			wantNil:    false,
+			wantErr:    false,
+			wantTool:   "TaskUpdate",
+			wantSessID: "s2",
+			wantCwd:    "/home",
+		},
+		{
+			name:    "non-task tool returns nil nil",
 			input:   `{"tool_name":"Read","tool_input":{},"session_id":"s","cwd":"/"}`,
 			wantNil: true,
 			wantErr: false,
 		},
 		{
-			name:    "missing tool_name treated as non-TodoWrite",
+			name:    "TodoWrite is no longer accepted",
+			input:   `{"tool_name":"TodoWrite","tool_input":{"todos":[]},"session_id":"s","cwd":"/"}`,
+			wantNil: true,
+			wantErr: false,
+		},
+		{
+			name:    "TaskGet is not accepted",
+			input:   `{"tool_name":"TaskGet","tool_input":{"taskId":"1"},"session_id":"s","cwd":"/"}`,
+			wantNil: true,
+			wantErr: false,
+		},
+		{
+			name:    "TaskList is not accepted",
+			input:   `{"tool_name":"TaskList","tool_input":{},"session_id":"s","cwd":"/"}`,
+			wantNil: true,
+			wantErr: false,
+		},
+		{
+			name:    "missing tool_name treated as non-task",
 			input:   `{"tool_input":{},"session_id":"s","cwd":"/"}`,
 			wantNil: true,
 			wantErr: false,
 		},
 		{
-			name:    "empty tool_name treated as non-TodoWrite",
+			name:    "empty tool_name treated as non-task",
 			input:   `{"tool_name":"","tool_input":{},"session_id":"s","cwd":"/"}`,
 			wantNil: true,
 			wantErr: false,
@@ -58,10 +87,11 @@ func Test_ReadHookInput(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:       "TodoWrite preserves session_id and cwd",
-			input:      `{"tool_name":"TodoWrite","tool_input":{"todos":[{"content":"x","status":"y","activeForm":"z"}]},"session_id":"sess123","cwd":"/home"}`,
+			name:       "TaskCreate preserves session_id and cwd",
+			input:      `{"tool_name":"TaskCreate","tool_input":{"subject":"x"},"session_id":"sess123","cwd":"/home"}`,
 			wantNil:    false,
 			wantErr:    false,
+			wantTool:   "TaskCreate",
 			wantSessID: "sess123",
 			wantCwd:    "/home",
 		},
@@ -100,8 +130,8 @@ func Test_ReadHookInput(t *testing.T) {
 				t.Fatal("ReadHookInput() returned nil, expected non-nil *HookInput")
 			}
 
-			if got.ToolName != "TodoWrite" {
-				t.Errorf("ReadHookInput() ToolName = %q, want %q", got.ToolName, "TodoWrite")
+			if got.ToolName != tt.wantTool {
+				t.Errorf("ReadHookInput() ToolName = %q, want %q", got.ToolName, tt.wantTool)
 			}
 
 			if got.SessionID != tt.wantSessID {
@@ -118,7 +148,7 @@ func Test_ReadHookInput(t *testing.T) {
 func Test_ReadHookInput_ToolInput_IsRawJSON(t *testing.T) {
 	t.Parallel()
 
-	input := `{"tool_name":"TodoWrite","tool_input":{"todos":[{"content":"x","status":"y","activeForm":"z"}]},"session_id":"s1","cwd":"/tmp"}`
+	input := `{"tool_name":"TaskCreate","tool_input":{"subject":"test task","description":"desc","activeForm":"Testing"},"session_id":"s1","cwd":"/tmp"}`
 	r := strings.NewReader(input)
 	got, err := ReadHookInput(r)
 	if err != nil {
@@ -139,171 +169,61 @@ func Test_ReadHookInput_ToolInput_IsRawJSON(t *testing.T) {
 		t.Errorf("ReadHookInput() ToolInput is not valid JSON: %v", err)
 	}
 
-	if _, ok := parsed["todos"]; !ok {
-		t.Error("ReadHookInput() ToolInput missing 'todos' key")
+	if _, ok := parsed["subject"]; !ok {
+		t.Error("ReadHookInput() ToolInput missing 'subject' key")
 	}
 }
 
-func Test_ValidateTodo(t *testing.T) {
+func Test_ParseTaskInput_TaskCreate(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		item map[string]any
-		want bool
+		name     string
+		rawInput string
+		useNil   bool
+		want     storage.TaskItem
 	}{
 		{
-			name: "all required keys present",
-			item: map[string]any{
-				"content":    "task",
-				"status":     "pending",
-				"activeForm": "Doing task",
-			},
-			want: true,
-		},
-		{
-			name: "missing content",
-			item: map[string]any{
-				"status":     "pending",
-				"activeForm": "Doing task",
-			},
-			want: false,
-		},
-		{
-			name: "missing status",
-			item: map[string]any{
-				"content":    "task",
-				"activeForm": "Doing task",
-			},
-			want: false,
-		},
-		{
-			name: "missing activeForm",
-			item: map[string]any{
-				"content": "task",
-				"status":  "pending",
-			},
-			want: false,
-		},
-		{
-			name: "extra keys allowed",
-			item: map[string]any{
-				"content":    "task",
-				"status":     "pending",
-				"activeForm": "Doing task",
-				"priority":   "high",
-				"tags":       []string{"important"},
-			},
-			want: true,
-		},
-		{
-			name: "empty string values are valid",
-			item: map[string]any{
-				"content":    "",
-				"status":     "",
-				"activeForm": "",
-			},
-			want: true,
-		},
-		{
-			name: "non-string values are valid if keys exist",
-			item: map[string]any{
-				"content":    123,
-				"status":     true,
-				"activeForm": nil,
-			},
-			want: true,
-		},
-		{
-			name: "empty map",
-			item: map[string]any{},
-			want: false,
-		},
-		{
-			name: "nil map",
-			item: nil,
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := ValidateTodo(tt.item)
-			if got != tt.want {
-				t.Errorf("ValidateTodo(%v) = %v, want %v", tt.item, got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_ValidateTodos(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		rawInput  string
-		useNil    bool
-		wantCount int
-		wantTodos []storage.TodoItem
-	}{
-		{
-			name:      "valid single todo",
-			rawInput:  `{"todos":[{"content":"task","status":"pending","activeForm":"Doing"}]}`,
-			wantCount: 1,
-			wantTodos: []storage.TodoItem{
-				{Content: "task", Status: "pending", ActiveForm: "Doing"},
+			name:     "full TaskCreate input",
+			rawInput: `{"subject":"Write tests","description":"Write unit tests for the parser","activeForm":"Writing tests"}`,
+			want: storage.TaskItem{
+				Subject:     "Write tests",
+				Description: "Write unit tests for the parser",
+				Status:      "pending",
+				ActiveForm:  "Writing tests",
 			},
 		},
 		{
-			name:      "valid multiple todos",
-			rawInput:  `{"todos":[{"content":"task1","status":"pending","activeForm":"Doing1"},{"content":"task2","status":"done","activeForm":"Doing2"}]}`,
-			wantCount: 2,
-			wantTodos: []storage.TodoItem{
-				{Content: "task1", Status: "pending", ActiveForm: "Doing1"},
-				{Content: "task2", Status: "done", ActiveForm: "Doing2"},
+			name:     "minimal TaskCreate input",
+			rawInput: `{"subject":"Quick task"}`,
+			want: storage.TaskItem{
+				Subject: "Quick task",
+				Status:  "pending",
 			},
 		},
 		{
-			name:      "mixed valid and invalid filters out invalid",
-			rawInput:  `{"todos":[{"content":"task","status":"pending","activeForm":"Doing"},{"status":"pending","activeForm":"Doing"}]}`,
-			wantCount: 1,
-			wantTodos: []storage.TodoItem{
-				{Content: "task", Status: "pending", ActiveForm: "Doing"},
-			},
+			name:   "nil input defaults to pending",
+			useNil: true,
+			want:   storage.TaskItem{Status: "pending"},
 		},
 		{
-			name:      "empty todos array",
-			rawInput:  `{"todos":[]}`,
-			wantCount: 0,
+			name:     "empty JSON object",
+			rawInput: `{}`,
+			want:     storage.TaskItem{Status: "pending"},
 		},
 		{
-			name:      "nil input",
-			useNil:    true,
-			wantCount: 0,
+			name:     "invalid JSON",
+			rawInput: `{bad`,
+			want:     storage.TaskItem{Status: "pending"},
 		},
 		{
-			name:      "empty JSON object",
-			rawInput:  `{}`,
-			wantCount: 0,
-		},
-		{
-			name:      "invalid JSON",
-			rawInput:  `{bad`,
-			wantCount: 0,
-		},
-		{
-			name:      "todos field is not an array",
-			rawInput:  `{"todos":"string"}`,
-			wantCount: 0,
-		},
-		{
-			name:      "non-string values converted to strings",
-			rawInput:  `{"todos":[{"content":123,"status":true,"activeForm":"z"}]}`,
-			wantCount: 1,
-			wantTodos: []storage.TodoItem{
-				{Content: "123", Status: "true", ActiveForm: "z"},
+			name:     "with metadata",
+			rawInput: `{"subject":"Task with meta","activeForm":"Working","metadata":{"priority":"high"}}`,
+			want: storage.TaskItem{
+				Subject:    "Task with meta",
+				Status:     "pending",
+				ActiveForm: "Working",
+				Metadata:   map[string]any{"priority": "high"},
 			},
 		},
 	}
@@ -319,29 +239,111 @@ func Test_ValidateTodos(t *testing.T) {
 				raw = json.RawMessage(tt.rawInput)
 			}
 
-			got := ValidateTodos(raw)
+			got := ParseTaskInput("TaskCreate", raw)
 
-			if got == nil {
-				t.Fatal("ValidateTodos() returned nil, expected non-nil slice")
+			if got.Subject != tt.want.Subject {
+				t.Errorf("Subject = %q, want %q", got.Subject, tt.want.Subject)
+			}
+			if got.Description != tt.want.Description {
+				t.Errorf("Description = %q, want %q", got.Description, tt.want.Description)
+			}
+			if got.Status != tt.want.Status {
+				t.Errorf("Status = %q, want %q", got.Status, tt.want.Status)
+			}
+			if got.ActiveForm != tt.want.ActiveForm {
+				t.Errorf("ActiveForm = %q, want %q", got.ActiveForm, tt.want.ActiveForm)
+			}
+		})
+	}
+}
+
+func Test_ParseTaskInput_TaskUpdate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		rawInput string
+		want     storage.TaskItem
+	}{
+		{
+			name:     "status update only",
+			rawInput: `{"taskId":"1","status":"completed"}`,
+			want: storage.TaskItem{
+				ID:     "1",
+				Status: "completed",
+			},
+		},
+		{
+			name:     "full update",
+			rawInput: `{"taskId":"2","status":"in_progress","subject":"Updated subject","description":"New desc","activeForm":"Working","owner":"agent-1"}`,
+			want: storage.TaskItem{
+				ID:          "2",
+				Subject:     "Updated subject",
+				Description: "New desc",
+				Status:      "in_progress",
+				ActiveForm:  "Working",
+				Owner:       "agent-1",
+			},
+		},
+		{
+			name:     "update with blocks",
+			rawInput: `{"taskId":"3","status":"pending","addBlocks":["4","5"],"addBlockedBy":["1"]}`,
+			want: storage.TaskItem{
+				ID:        "3",
+				Status:    "pending",
+				Blocks:    []string{"4", "5"},
+				BlockedBy: []string{"1"},
+			},
+		},
+		{
+			name:     "TaskUpdate with no status keeps empty",
+			rawInput: `{"taskId":"4","subject":"Renamed"}`,
+			want: storage.TaskItem{
+				ID:      "4",
+				Subject: "Renamed",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			raw := json.RawMessage(tt.rawInput)
+			got := ParseTaskInput("TaskUpdate", raw)
+
+			if got.ID != tt.want.ID {
+				t.Errorf("ID = %q, want %q", got.ID, tt.want.ID)
+			}
+			if got.Subject != tt.want.Subject {
+				t.Errorf("Subject = %q, want %q", got.Subject, tt.want.Subject)
+			}
+			if got.Status != tt.want.Status {
+				t.Errorf("Status = %q, want %q", got.Status, tt.want.Status)
+			}
+			if got.ActiveForm != tt.want.ActiveForm {
+				t.Errorf("ActiveForm = %q, want %q", got.ActiveForm, tt.want.ActiveForm)
+			}
+			if got.Owner != tt.want.Owner {
+				t.Errorf("Owner = %q, want %q", got.Owner, tt.want.Owner)
 			}
 
-			if len(got) != tt.wantCount {
-				t.Fatalf("ValidateTodos() returned %d items, want %d", len(got), tt.wantCount)
+			// Check slice fields
+			if len(got.Blocks) != len(tt.want.Blocks) {
+				t.Errorf("Blocks length = %d, want %d", len(got.Blocks), len(tt.want.Blocks))
+			} else {
+				for i := range tt.want.Blocks {
+					if got.Blocks[i] != tt.want.Blocks[i] {
+						t.Errorf("Blocks[%d] = %q, want %q", i, got.Blocks[i], tt.want.Blocks[i])
+					}
+				}
 			}
-
-			if tt.wantTodos != nil {
-				for i, want := range tt.wantTodos {
-					if i >= len(got) {
-						break
-					}
-					if got[i].Content != want.Content {
-						t.Errorf("todo[%d].Content = %q, want %q", i, got[i].Content, want.Content)
-					}
-					if got[i].Status != want.Status {
-						t.Errorf("todo[%d].Status = %q, want %q", i, got[i].Status, want.Status)
-					}
-					if got[i].ActiveForm != want.ActiveForm {
-						t.Errorf("todo[%d].ActiveForm = %q, want %q", i, got[i].ActiveForm, want.ActiveForm)
+			if len(got.BlockedBy) != len(tt.want.BlockedBy) {
+				t.Errorf("BlockedBy length = %d, want %d", len(got.BlockedBy), len(tt.want.BlockedBy))
+			} else {
+				for i := range tt.want.BlockedBy {
+					if got.BlockedBy[i] != tt.want.BlockedBy[i] {
+						t.Errorf("BlockedBy[%d] = %q, want %q", i, got.BlockedBy[i], tt.want.BlockedBy[i])
 					}
 				}
 			}
@@ -349,34 +351,67 @@ func Test_ValidateTodos(t *testing.T) {
 	}
 }
 
-func Test_ValidateTodos_AllInvalid(t *testing.T) {
+func Test_toStringSlice(t *testing.T) {
 	t.Parallel()
 
-	raw := json.RawMessage(`{"todos":[{"content":"a"},{"status":"b"},{"activeForm":"c"}]}`)
-	got := ValidateTodos(raw)
-
-	if got == nil {
-		t.Fatal("ValidateTodos() returned nil, expected non-nil empty slice")
+	tests := []struct {
+		name  string
+		input any
+		want  []string
+	}{
+		{
+			name:  "valid string slice",
+			input: []any{"a", "b", "c"},
+			want:  []string{"a", "b", "c"},
+		},
+		{
+			name:  "nil input",
+			input: nil,
+			want:  nil,
+		},
+		{
+			name:  "empty slice",
+			input: []any{},
+			want:  nil,
+		},
+		{
+			name:  "non-string elements filtered",
+			input: []any{"a", 123, "b"},
+			want:  []string{"a", "b"},
+		},
+		{
+			name:  "all non-string elements",
+			input: []any{1, 2, 3},
+			want:  nil,
+		},
+		{
+			name:  "not a slice",
+			input: "string",
+			want:  nil,
+		},
 	}
-	if len(got) != 0 {
-		t.Errorf("ValidateTodos() returned %d items, want 0 (all invalid)", len(got))
-	}
-}
 
-func Test_ValidateTodos_NonNilEmptySlice(t *testing.T) {
-	t.Parallel()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	inputs := []json.RawMessage{
-		nil,
-		json.RawMessage(`{}`),
-		json.RawMessage(`{"todos":[]}`),
-		json.RawMessage(`{bad`),
-	}
+			got := toStringSlice(tt.input)
 
-	for _, raw := range inputs {
-		got := ValidateTodos(raw)
-		if got == nil {
-			t.Errorf("ValidateTodos(%s) returned nil, expected non-nil empty slice", string(raw))
-		}
+			if tt.want == nil {
+				if got != nil {
+					t.Errorf("toStringSlice() = %v, want nil", got)
+				}
+				return
+			}
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("toStringSlice() length = %d, want %d", len(got), len(tt.want))
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Errorf("toStringSlice()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
 	}
 }

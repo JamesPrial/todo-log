@@ -27,12 +27,13 @@ func newTestBackend(t *testing.T) (*storage.SQLiteBackend, string) {
 }
 
 // makeEntry is a convenience constructor for LogEntry values used in tests.
-func makeEntry(ts, session, cwd string, todos []storage.TodoItem) storage.LogEntry {
+func makeEntry(ts, session, cwd, toolName string, task storage.TaskItem) storage.LogEntry {
 	return storage.LogEntry{
 		Timestamp: ts,
 		SessionID: session,
 		Cwd:       cwd,
-		Todos:     todos,
+		ToolName:  toolName,
+		Task:      task,
 	}
 }
 
@@ -69,20 +70,20 @@ func Test_NewSQLiteBackend_CreatesLogEntriesTable(t *testing.T) {
 	}
 }
 
-func Test_NewSQLiteBackend_CreatesTodosTable(t *testing.T) {
+func Test_NewSQLiteBackend_NoSeparateTodosTable(t *testing.T) {
 	t.Parallel()
 	_, dbPath := newTestBackend(t)
 
 	db := openDirectDB(t, dbPath)
-	var name string
+	var count int
 	err := db.QueryRow(
-		`SELECT name FROM sqlite_master WHERE type='table' AND name='todos'`,
-	).Scan(&name)
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='todos'`,
+	).Scan(&count)
 	if err != nil {
-		t.Fatalf("todos table not found: %v", err)
+		t.Fatalf("query sqlite_master: %v", err)
 	}
-	if name != "todos" {
-		t.Errorf("expected table name 'todos', got %q", name)
+	if count != 0 {
+		t.Errorf("expected no 'todos' table (denormalized schema), but found one")
 	}
 }
 
@@ -97,7 +98,7 @@ func Test_NewSQLiteBackend_CreatesIndexes(t *testing.T) {
 		indexName string
 	}{
 		{name: "session index", indexName: "idx_entries_session"},
-		{name: "status index", indexName: "idx_todos_status"},
+		{name: "status index", indexName: "idx_entries_status"},
 	}
 
 	for _, tt := range tests {
@@ -158,25 +159,39 @@ func Test_NewSQLiteBackend_WALMode(t *testing.T) {
 	}
 }
 
-func Test_NewSQLiteBackend_ForeignKeysEnabled(t *testing.T) {
+func Test_NewSQLiteBackend_LogEntriesColumns(t *testing.T) {
 	t.Parallel()
 	_, dbPath := newTestBackend(t)
 
-	// Verify foreign keys are enforced by attempting to insert a todo
-	// with a non-existent entry_id. The backend's connect() method enables
-	// foreign keys, so we need to do the same on our direct connection.
 	db := openDirectDB(t, dbPath)
-
-	// Enable foreign keys on this connection (matching backend behavior)
-	_, err := db.Exec("PRAGMA foreign_keys=ON")
+	rows, err := db.Query(`PRAGMA table_info(log_entries)`)
 	if err != nil {
-		t.Fatalf("failed to enable foreign keys: %v", err)
+		t.Fatalf("PRAGMA table_info: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull int
+		var dfltValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dfltValue, &pk); err != nil {
+			t.Fatalf("scan column info: %v", err)
+		}
+		columns[name] = true
 	}
 
-	// Try to insert a todo with non-existent entry_id
-	_, err = db.Exec("INSERT INTO todos (entry_id, content, status, active_form) VALUES (9999, 'test', 'pending', 'Testing')")
-	if err == nil {
-		t.Error("expected foreign key constraint error, but insert succeeded")
+	expected := []string{
+		"id", "timestamp", "session_id", "cwd", "tool_name",
+		"task_id", "subject", "description", "status", "active_form",
+		"owner", "blocks", "blocked_by", "metadata",
+	}
+	for _, col := range expected {
+		if !columns[col] {
+			t.Errorf("expected column %q in log_entries, not found. Columns: %v", col, columns)
+		}
 	}
 }
 
@@ -192,7 +207,8 @@ func Test_AppendEntry_CorrectFieldsInLogEntries(t *testing.T) {
 		"2025-11-14T10:30:45.123Z",
 		"session-abc",
 		"/home/user/project",
-		[]storage.TodoItem{{Content: "task", Status: "pending", ActiveForm: "Doing task"}},
+		"TaskCreate",
+		storage.TaskItem{Subject: "task", Status: "pending", ActiveForm: "Doing task"},
 	)
 
 	if err := b.AppendEntry(entry); err != nil {
@@ -200,8 +216,10 @@ func Test_AppendEntry_CorrectFieldsInLogEntries(t *testing.T) {
 	}
 
 	db := openDirectDB(t, dbPath)
-	var ts, sid, cwd string
-	err := db.QueryRow(`SELECT timestamp, session_id, cwd FROM log_entries WHERE id=1`).Scan(&ts, &sid, &cwd)
+	var ts, sid, cwd, toolName, subject, status, activeForm string
+	err := db.QueryRow(
+		`SELECT timestamp, session_id, cwd, tool_name, subject, status, active_form FROM log_entries WHERE id=1`,
+	).Scan(&ts, &sid, &cwd, &toolName, &subject, &status, &activeForm)
 	if err != nil {
 		t.Fatalf("query log_entries: %v", err)
 	}
@@ -215,39 +233,34 @@ func Test_AppendEntry_CorrectFieldsInLogEntries(t *testing.T) {
 	if cwd != entry.Cwd {
 		t.Errorf("cwd: got %q, want %q", cwd, entry.Cwd)
 	}
-}
-
-func Test_AppendEntry_AssociatedTodos(t *testing.T) {
-	t.Parallel()
-	b, dbPath := newTestBackend(t)
-
-	todos := []storage.TodoItem{
-		{Content: "first", Status: "pending", ActiveForm: "Starting first"},
-		{Content: "second", Status: "in_progress", ActiveForm: "Working on second"},
-		{Content: "third", Status: "completed", ActiveForm: "Finished third"},
+	if toolName != entry.ToolName {
+		t.Errorf("tool_name: got %q, want %q", toolName, entry.ToolName)
 	}
-	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", todos)
-
-	if err := b.AppendEntry(entry); err != nil {
-		t.Fatalf("AppendEntry: %v", err)
+	if subject != entry.Task.Subject {
+		t.Errorf("subject: got %q, want %q", subject, entry.Task.Subject)
 	}
-
-	db := openDirectDB(t, dbPath)
-	var count int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM todos WHERE entry_id=1`).Scan(&count); err != nil {
-		t.Fatalf("query todos count: %v", err)
+	if status != entry.Task.Status {
+		t.Errorf("status: got %q, want %q", status, entry.Task.Status)
 	}
-	if count != 3 {
-		t.Errorf("expected 3 todos linked to entry, got %d", count)
+	if activeForm != entry.Task.ActiveForm {
+		t.Errorf("active_form: got %q, want %q", activeForm, entry.Task.ActiveForm)
 	}
 }
 
-func Test_AppendEntry_ForeignKeyLink(t *testing.T) {
+func Test_AppendEntry_TaskFieldsStored(t *testing.T) {
 	t.Parallel()
 	b, dbPath := newTestBackend(t)
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-		{Content: "task", Status: "pending", ActiveForm: "Doing"},
+	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskUpdate", storage.TaskItem{
+		ID:          "42",
+		Subject:     "Updated task",
+		Description: "A description",
+		Status:      "in_progress",
+		ActiveForm:  "Working",
+		Owner:       "agent-1",
+		Blocks:      []string{"43", "44"},
+		BlockedBy:   []string{"41"},
+		Metadata:    map[string]any{"priority": "high"},
 	})
 
 	if err := b.AppendEntry(entry); err != nil {
@@ -255,19 +268,34 @@ func Test_AppendEntry_ForeignKeyLink(t *testing.T) {
 	}
 
 	db := openDirectDB(t, dbPath)
-
-	var entryID int
-	if err := db.QueryRow(`SELECT id FROM log_entries LIMIT 1`).Scan(&entryID); err != nil {
-		t.Fatalf("query log_entries id: %v", err)
+	var taskID, subject, desc, status, activeForm, owner, blocksJSON, blockedByJSON, metaJSON string
+	err := db.QueryRow(
+		`SELECT task_id, subject, description, status, active_form, owner, blocks, blocked_by, metadata FROM log_entries WHERE id=1`,
+	).Scan(&taskID, &subject, &desc, &status, &activeForm, &owner, &blocksJSON, &blockedByJSON, &metaJSON)
+	if err != nil {
+		t.Fatalf("query log_entries: %v", err)
 	}
 
-	var todoEntryID int
-	if err := db.QueryRow(`SELECT entry_id FROM todos LIMIT 1`).Scan(&todoEntryID); err != nil {
-		t.Fatalf("query todos entry_id: %v", err)
+	if taskID != "42" {
+		t.Errorf("task_id: got %q, want %q", taskID, "42")
 	}
-
-	if entryID != todoEntryID {
-		t.Errorf("foreign key mismatch: log_entries.id=%d, todos.entry_id=%d", entryID, todoEntryID)
+	if subject != "Updated task" {
+		t.Errorf("subject: got %q, want %q", subject, "Updated task")
+	}
+	if desc != "A description" {
+		t.Errorf("description: got %q, want %q", desc, "A description")
+	}
+	if status != "in_progress" {
+		t.Errorf("status: got %q, want %q", status, "in_progress")
+	}
+	if owner != "agent-1" {
+		t.Errorf("owner: got %q, want %q", owner, "agent-1")
+	}
+	if blocksJSON != `["43","44"]` {
+		t.Errorf("blocks: got %q, want %q", blocksJSON, `["43","44"]`)
+	}
+	if blockedByJSON != `["41"]` {
+		t.Errorf("blocked_by: got %q, want %q", blockedByJSON, `["41"]`)
 	}
 }
 
@@ -275,10 +303,10 @@ func Test_AppendEntry_UnicodePreserved(t *testing.T) {
 	t.Parallel()
 	b, dbPath := newTestBackend(t)
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "unicode-sess", "/tmp", []storage.TodoItem{
-		{Content: "tarea en espanol", Status: "pendiente", ActiveForm: "Haciendo tarea"},
-		{Content: "Japanese chars", Status: "pending", ActiveForm: "Processing"},
-		{Content: "emoji: check mark", Status: "done", ActiveForm: "Finished"},
+	entry := makeEntry("2025-01-01T00:00:00Z", "unicode-sess", "/tmp", "TaskCreate", storage.TaskItem{
+		Subject:    "tarea en espanol",
+		Status:     "pendiente",
+		ActiveForm: "Haciendo tarea",
 	})
 
 	if err := b.AppendEntry(entry); err != nil {
@@ -286,66 +314,20 @@ func Test_AppendEntry_UnicodePreserved(t *testing.T) {
 	}
 
 	db := openDirectDB(t, dbPath)
-	rows, err := db.Query(`SELECT content, status, active_form FROM todos ORDER BY id`)
+	var subject, status, activeForm string
+	err := db.QueryRow(`SELECT subject, status, active_form FROM log_entries WHERE id=1`).Scan(&subject, &status, &activeForm)
 	if err != nil {
-		t.Fatalf("query todos: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var results []storage.TodoItem
-	for rows.Next() {
-		var item storage.TodoItem
-		if err := rows.Scan(&item.Content, &item.Status, &item.ActiveForm); err != nil {
-			t.Fatalf("scan todo: %v", err)
-		}
-		results = append(results, item)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("rows iteration: %v", err)
+		t.Fatalf("query: %v", err)
 	}
 
-	if len(results) != len(entry.Todos) {
-		t.Fatalf("expected %d todos, got %d", len(entry.Todos), len(results))
+	if subject != "tarea en espanol" {
+		t.Errorf("subject: got %q, want %q", subject, "tarea en espanol")
 	}
-	for i, want := range entry.Todos {
-		got := results[i]
-		if got.Content != want.Content {
-			t.Errorf("todo[%d] content: got %q, want %q", i, got.Content, want.Content)
-		}
-		if got.Status != want.Status {
-			t.Errorf("todo[%d] status: got %q, want %q", i, got.Status, want.Status)
-		}
-		if got.ActiveForm != want.ActiveForm {
-			t.Errorf("todo[%d] active_form: got %q, want %q", i, got.ActiveForm, want.ActiveForm)
-		}
+	if status != "pendiente" {
+		t.Errorf("status: got %q, want %q", status, "pendiente")
 	}
-}
-
-func Test_AppendEntry_EmptyTodos(t *testing.T) {
-	t.Parallel()
-	b, dbPath := newTestBackend(t)
-
-	entry := makeEntry("2025-01-01T00:00:00Z", "empty-sess", "/cwd", []storage.TodoItem{})
-
-	if err := b.AppendEntry(entry); err != nil {
-		t.Fatalf("AppendEntry with empty todos: %v", err)
-	}
-
-	db := openDirectDB(t, dbPath)
-
-	var count int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM log_entries`).Scan(&count); err != nil {
-		t.Fatalf("query log_entries count: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("expected 1 log entry, got %d", count)
-	}
-
-	if err := db.QueryRow(`SELECT COUNT(*) FROM todos`).Scan(&count); err != nil {
-		t.Fatalf("query todos count: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("expected 0 todos, got %d", count)
+	if activeForm != "Haciendo tarea" {
+		t.Errorf("active_form: got %q, want %q", activeForm, "Haciendo tarea")
 	}
 }
 
@@ -354,8 +336,8 @@ func Test_AppendEntry_AutoIncrementIDs(t *testing.T) {
 	b, dbPath := newTestBackend(t)
 
 	for i := 0; i < 3; i++ {
-		entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-			{Content: "task", Status: "pending", ActiveForm: "Doing"},
+		entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "task", Status: "pending", ActiveForm: "Doing",
 		})
 		if err := b.AppendEntry(entry); err != nil {
 			t.Fatalf("AppendEntry #%d: %v", i+1, err)
@@ -395,8 +377,8 @@ func Test_AppendEntry_ActiveFormToActiveFormColumn(t *testing.T) {
 	t.Parallel()
 	b, dbPath := newTestBackend(t)
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-		{Content: "task", Status: "pending", ActiveForm: "Doing the task now"},
+	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+		Subject: "task", Status: "pending", ActiveForm: "Doing the task now",
 	})
 
 	if err := b.AppendEntry(entry); err != nil {
@@ -405,7 +387,7 @@ func Test_AppendEntry_ActiveFormToActiveFormColumn(t *testing.T) {
 
 	db := openDirectDB(t, dbPath)
 	var activeForm string
-	err := db.QueryRow(`SELECT active_form FROM todos WHERE id=1`).Scan(&activeForm)
+	err := db.QueryRow(`SELECT active_form FROM log_entries WHERE id=1`).Scan(&activeForm)
 	if err != nil {
 		t.Fatalf("query active_form: %v", err)
 	}
@@ -431,13 +413,12 @@ func Test_LoadHistory_EmptyDatabase(t *testing.T) {
 	}
 }
 
-func Test_LoadHistory_EntriesWithTodos(t *testing.T) {
+func Test_LoadHistory_EntryWithTask(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
-	original := makeEntry("2025-01-01T00:00:00Z", "sess1", "/project", []storage.TodoItem{
-		{Content: "task1", Status: "pending", ActiveForm: "Doing task1"},
-		{Content: "task2", Status: "completed", ActiveForm: "Done task2"},
+	original := makeEntry("2025-01-01T00:00:00Z", "sess1", "/project", "TaskCreate", storage.TaskItem{
+		Subject: "task1", Status: "pending", ActiveForm: "Doing task1",
 	})
 
 	if err := b.AppendEntry(original); err != nil {
@@ -463,13 +444,17 @@ func Test_LoadHistory_EntriesWithTodos(t *testing.T) {
 	if got.Cwd != original.Cwd {
 		t.Errorf("Cwd: got %q, want %q", got.Cwd, original.Cwd)
 	}
-	if len(got.Todos) != len(original.Todos) {
-		t.Fatalf("Todos length: got %d, want %d", len(got.Todos), len(original.Todos))
+	if got.ToolName != original.ToolName {
+		t.Errorf("ToolName: got %q, want %q", got.ToolName, original.ToolName)
 	}
-	for i := range original.Todos {
-		if got.Todos[i] != original.Todos[i] {
-			t.Errorf("Todos[%d]: got %+v, want %+v", i, got.Todos[i], original.Todos[i])
-		}
+	if got.Task.Subject != original.Task.Subject {
+		t.Errorf("Task.Subject: got %q, want %q", got.Task.Subject, original.Task.Subject)
+	}
+	if got.Task.Status != original.Task.Status {
+		t.Errorf("Task.Status: got %q, want %q", got.Task.Status, original.Task.Status)
+	}
+	if got.Task.ActiveForm != original.Task.ActiveForm {
+		t.Errorf("Task.ActiveForm: got %q, want %q", got.Task.ActiveForm, original.Task.ActiveForm)
 	}
 }
 
@@ -484,8 +469,8 @@ func Test_LoadHistory_MaintainsInsertionOrder(t *testing.T) {
 	}
 
 	for i, ts := range timestamps {
-		entry := makeEntry(ts, "sess", "/cwd", []storage.TodoItem{
-			{Content: "task", Status: "pending", ActiveForm: "Doing"},
+		entry := makeEntry(ts, "sess", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "task", Status: "pending", ActiveForm: "Doing",
 		})
 		if err := b.AppendEntry(entry); err != nil {
 			t.Fatalf("AppendEntry #%d: %v", i, err)
@@ -511,8 +496,8 @@ func Test_LoadHistory_ActiveFormMapping(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-		{Content: "task", Status: "pending", ActiveForm: "Working on task right now"},
+	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+		Subject: "task", Status: "pending", ActiveForm: "Working on task right now",
 	})
 
 	if err := b.AppendEntry(entry); err != nil {
@@ -524,38 +509,13 @@ func Test_LoadHistory_ActiveFormMapping(t *testing.T) {
 		t.Fatalf("LoadHistory: %v", err)
 	}
 
-	if len(entries) != 1 || len(entries[0].Todos) != 1 {
+	if len(entries) != 1 {
 		t.Fatalf("unexpected result shape: %d entries", len(entries))
 	}
 
-	got := entries[0].Todos[0].ActiveForm
+	got := entries[0].Task.ActiveForm
 	if got != "Working on task right now" {
 		t.Errorf("ActiveForm: got %q, want %q", got, "Working on task right now")
-	}
-}
-
-func Test_LoadHistory_EntryWithNoTodos(t *testing.T) {
-	t.Parallel()
-	b, _ := newTestBackend(t)
-
-	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{})
-	if err := b.AppendEntry(entry); err != nil {
-		t.Fatalf("AppendEntry: %v", err)
-	}
-
-	entries, err := b.LoadHistory()
-	if err != nil {
-		t.Fatalf("LoadHistory: %v", err)
-	}
-
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
-	}
-	if entries[0].Todos == nil {
-		t.Logf("note: Todos is nil for entry with no todos")
-	}
-	if len(entries[0].Todos) != 0 {
-		t.Errorf("expected 0 todos, got %d", len(entries[0].Todos))
 	}
 }
 
@@ -563,9 +523,8 @@ func Test_LoadHistory_UnicodePreserved(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "unicode-sess", "/cwd", []storage.TodoItem{
-		{Content: "tarea en espanol", Status: "pendiente", ActiveForm: "Haciendo tarea"},
-		{Content: "Japanese chars", Status: "pending", ActiveForm: "Processing"},
+	entry := makeEntry("2025-01-01T00:00:00Z", "unicode-sess", "/cwd", "TaskCreate", storage.TaskItem{
+		Subject: "tarea en espanol", Status: "pendiente", ActiveForm: "Haciendo tarea",
 	})
 
 	if err := b.AppendEntry(entry); err != nil {
@@ -581,36 +540,31 @@ func Test_LoadHistory_UnicodePreserved(t *testing.T) {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
 
-	for i, want := range entry.Todos {
-		got := entries[0].Todos[i]
-		if got.Content != want.Content {
-			t.Errorf("todo[%d] content: got %q, want %q", i, got.Content, want.Content)
-		}
-		if got.Status != want.Status {
-			t.Errorf("todo[%d] status: got %q, want %q", i, got.Status, want.Status)
-		}
-		if got.ActiveForm != want.ActiveForm {
-			t.Errorf("todo[%d] activeForm: got %q, want %q", i, got.ActiveForm, want.ActiveForm)
-		}
+	got := entries[0].Task
+	if got.Subject != "tarea en espanol" {
+		t.Errorf("Subject: got %q, want %q", got.Subject, "tarea en espanol")
+	}
+	if got.Status != "pendiente" {
+		t.Errorf("Status: got %q, want %q", got.Status, "pendiente")
+	}
+	if got.ActiveForm != "Haciendo tarea" {
+		t.Errorf("ActiveForm: got %q, want %q", got.ActiveForm, "Haciendo tarea")
 	}
 }
 
-func Test_LoadHistory_MultipleEntriesMultipleTodos(t *testing.T) {
+func Test_LoadHistory_MultipleEntries(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
 	inputEntries := []storage.LogEntry{
-		makeEntry("2025-01-01T00:00:00Z", "s1", "/proj1", []storage.TodoItem{
-			{Content: "t1a", Status: "pending", ActiveForm: "Doing t1a"},
-			{Content: "t1b", Status: "completed", ActiveForm: "Done t1b"},
+		makeEntry("2025-01-01T00:00:00Z", "s1", "/proj1", "TaskCreate", storage.TaskItem{
+			Subject: "t1", Status: "pending", ActiveForm: "Doing t1",
 		}),
-		makeEntry("2025-01-02T00:00:00Z", "s2", "/proj2", []storage.TodoItem{
-			{Content: "t2a", Status: "in_progress", ActiveForm: "Working t2a"},
+		makeEntry("2025-01-02T00:00:00Z", "s2", "/proj2", "TaskUpdate", storage.TaskItem{
+			ID: "1", Status: "in_progress", ActiveForm: "Working t1",
 		}),
-		makeEntry("2025-01-03T00:00:00Z", "s1", "/proj1", []storage.TodoItem{
-			{Content: "t3a", Status: "pending", ActiveForm: "Starting t3a"},
-			{Content: "t3b", Status: "pending", ActiveForm: "Starting t3b"},
-			{Content: "t3c", Status: "completed", ActiveForm: "Done t3c"},
+		makeEntry("2025-01-03T00:00:00Z", "s1", "/proj1", "TaskCreate", storage.TaskItem{
+			Subject: "t2", Status: "pending", ActiveForm: "Starting t2",
 		}),
 	}
 
@@ -637,18 +591,77 @@ func Test_LoadHistory_MultipleEntriesMultipleTodos(t *testing.T) {
 		if got.SessionID != want.SessionID {
 			t.Errorf("entry[%d] session_id: got %q, want %q", i, got.SessionID, want.SessionID)
 		}
-		if got.Cwd != want.Cwd {
-			t.Errorf("entry[%d] cwd: got %q, want %q", i, got.Cwd, want.Cwd)
+		if got.ToolName != want.ToolName {
+			t.Errorf("entry[%d] tool_name: got %q, want %q", i, got.ToolName, want.ToolName)
 		}
-		if len(got.Todos) != len(want.Todos) {
-			t.Fatalf("entry[%d] todos length: got %d, want %d", i, len(got.Todos), len(want.Todos))
+		if got.Task.Subject != want.Task.Subject {
+			t.Errorf("entry[%d] task.subject: got %q, want %q", i, got.Task.Subject, want.Task.Subject)
 		}
-		for j, wantTodo := range want.Todos {
-			gotTodo := got.Todos[j]
-			if gotTodo != wantTodo {
-				t.Errorf("entry[%d].todos[%d]: got %+v, want %+v", i, j, gotTodo, wantTodo)
-			}
+		if got.Task.Status != want.Task.Status {
+			t.Errorf("entry[%d] task.status: got %q, want %q", i, got.Task.Status, want.Task.Status)
 		}
+	}
+}
+
+func Test_LoadHistory_BlocksAndBlockedByPreserved(t *testing.T) {
+	t.Parallel()
+	b, _ := newTestBackend(t)
+
+	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskUpdate", storage.TaskItem{
+		ID:        "5",
+		Status:    "pending",
+		Blocks:    []string{"6", "7"},
+		BlockedBy: []string{"3", "4"},
+	})
+
+	if err := b.AppendEntry(entry); err != nil {
+		t.Fatalf("AppendEntry: %v", err)
+	}
+
+	entries, err := b.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+
+	got := entries[0].Task
+	if len(got.Blocks) != 2 || got.Blocks[0] != "6" || got.Blocks[1] != "7" {
+		t.Errorf("Blocks: got %v, want [6 7]", got.Blocks)
+	}
+	if len(got.BlockedBy) != 2 || got.BlockedBy[0] != "3" || got.BlockedBy[1] != "4" {
+		t.Errorf("BlockedBy: got %v, want [3 4]", got.BlockedBy)
+	}
+}
+
+func Test_LoadHistory_MetadataPreserved(t *testing.T) {
+	t.Parallel()
+	b, _ := newTestBackend(t)
+
+	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+		Subject:  "meta task",
+		Status:   "pending",
+		Metadata: map[string]any{"priority": "high", "estimate": float64(5)},
+	})
+
+	if err := b.AppendEntry(entry); err != nil {
+		t.Fatalf("AppendEntry: %v", err)
+	}
+
+	entries, err := b.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+
+	got := entries[0].Task.Metadata
+	if got["priority"] != "high" {
+		t.Errorf("Metadata[priority]: got %v, want %q", got["priority"], "high")
 	}
 }
 
@@ -661,14 +674,14 @@ func Test_GetEntriesBySession_MatchingEntries(t *testing.T) {
 	b, _ := newTestBackend(t)
 
 	inputEntries := []storage.LogEntry{
-		makeEntry("2025-01-01T00:00:00Z", "session-A", "/cwd", []storage.TodoItem{
-			{Content: "t1", Status: "pending", ActiveForm: "Doing t1"},
+		makeEntry("2025-01-01T00:00:00Z", "session-A", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "t1", Status: "pending", ActiveForm: "Doing t1",
 		}),
-		makeEntry("2025-01-02T00:00:00Z", "session-B", "/cwd", []storage.TodoItem{
-			{Content: "t2", Status: "pending", ActiveForm: "Doing t2"},
+		makeEntry("2025-01-02T00:00:00Z", "session-B", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "t2", Status: "pending", ActiveForm: "Doing t2",
 		}),
-		makeEntry("2025-01-03T00:00:00Z", "session-A", "/cwd", []storage.TodoItem{
-			{Content: "t3", Status: "pending", ActiveForm: "Doing t3"},
+		makeEntry("2025-01-03T00:00:00Z", "session-A", "/cwd", "TaskUpdate", storage.TaskItem{
+			ID: "1", Status: "completed",
 		}),
 	}
 
@@ -698,8 +711,8 @@ func Test_GetEntriesBySession_UnknownSession(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "existing-sess", "/cwd", []storage.TodoItem{
-		{Content: "task", Status: "pending", ActiveForm: "Doing"},
+	entry := makeEntry("2025-01-01T00:00:00Z", "existing-sess", "/cwd", "TaskCreate", storage.TaskItem{
+		Subject: "task", Status: "pending", ActiveForm: "Doing",
 	})
 	if err := b.AppendEntry(entry); err != nil {
 		t.Fatalf("AppendEntry: %v", err)
@@ -715,15 +728,16 @@ func Test_GetEntriesBySession_UnknownSession(t *testing.T) {
 	}
 }
 
-func Test_GetEntriesBySession_IncludesTodos(t *testing.T) {
+func Test_GetEntriesBySession_IncludesTaskData(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
-	todos := []storage.TodoItem{
-		{Content: "task1", Status: "pending", ActiveForm: "Doing task1"},
-		{Content: "task2", Status: "completed", ActiveForm: "Done task2"},
-	}
-	entry := makeEntry("2025-01-01T00:00:00Z", "my-session", "/cwd", todos)
+	entry := makeEntry("2025-01-01T00:00:00Z", "my-session", "/cwd", "TaskCreate", storage.TaskItem{
+		Subject:     "task1",
+		Description: "a detailed task",
+		Status:      "pending",
+		ActiveForm:  "Doing task1",
+	})
 
 	if err := b.AppendEntry(entry); err != nil {
 		t.Fatalf("AppendEntry: %v", err)
@@ -738,15 +752,15 @@ func Test_GetEntriesBySession_IncludesTodos(t *testing.T) {
 		t.Fatalf("expected 1 entry, got %d", len(results))
 	}
 
-	if len(results[0].Todos) != 2 {
-		t.Fatalf("expected 2 todos, got %d", len(results[0].Todos))
+	got := results[0].Task
+	if got.Subject != "task1" {
+		t.Errorf("Task.Subject: got %q, want %q", got.Subject, "task1")
 	}
-
-	for i, want := range todos {
-		got := results[0].Todos[i]
-		if got != want {
-			t.Errorf("todo[%d]: got %+v, want %+v", i, got, want)
-		}
+	if got.Description != "a detailed task" {
+		t.Errorf("Task.Description: got %q, want %q", got.Description, "a detailed task")
+	}
+	if got.ActiveForm != "Doing task1" {
+		t.Errorf("Task.ActiveForm: got %q, want %q", got.ActiveForm, "Doing task1")
 	}
 }
 
@@ -761,8 +775,8 @@ func Test_GetEntriesBySession_ChronologicalOrder(t *testing.T) {
 	}
 
 	for i, ts := range timestamps {
-		entry := makeEntry(ts, "same-session", "/cwd", []storage.TodoItem{
-			{Content: "task", Status: "pending", ActiveForm: "Doing"},
+		entry := makeEntry(ts, "same-session", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "task", Status: "pending", ActiveForm: "Doing",
 		})
 		if err := b.AppendEntry(entry); err != nil {
 			t.Fatalf("AppendEntry #%d: %v", i, err)
@@ -786,31 +800,41 @@ func Test_GetEntriesBySession_ChronologicalOrder(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// GetTodosByStatus tests
+// GetTasksByStatus tests
 // ---------------------------------------------------------------------------
 
-func Test_GetTodosByStatus_MatchingStatus(t *testing.T) {
+func Test_GetTasksByStatus_MatchingStatus(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-		{Content: "task1", Status: "pending", ActiveForm: "Doing task1"},
-		{Content: "task2", Status: "completed", ActiveForm: "Done task2"},
-		{Content: "task3", Status: "pending", ActiveForm: "Doing task3"},
-		{Content: "task4", Status: "in_progress", ActiveForm: "Working task4"},
-	})
-
-	if err := b.AppendEntry(entry); err != nil {
-		t.Fatalf("AppendEntry: %v", err)
+	entries := []storage.LogEntry{
+		makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "task1", Status: "pending", ActiveForm: "Doing task1",
+		}),
+		makeEntry("2025-01-02T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "task2", Status: "completed", ActiveForm: "Done task2",
+		}),
+		makeEntry("2025-01-03T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "task3", Status: "pending", ActiveForm: "Doing task3",
+		}),
+		makeEntry("2025-01-04T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "task4", Status: "in_progress", ActiveForm: "Working task4",
+		}),
 	}
 
-	results, err := b.GetTodosByStatus("pending")
+	for i, e := range entries {
+		if err := b.AppendEntry(e); err != nil {
+			t.Fatalf("AppendEntry #%d: %v", i, err)
+		}
+	}
+
+	results, err := b.GetTasksByStatus("pending")
 	if err != nil {
-		t.Fatalf("GetTodosByStatus: %v", err)
+		t.Fatalf("GetTasksByStatus: %v", err)
 	}
 
 	if len(results) != 2 {
-		t.Fatalf("expected 2 pending todos, got %d", len(results))
+		t.Fatalf("expected 2 pending tasks, got %d", len(results))
 	}
 
 	for _, r := range results {
@@ -820,42 +844,43 @@ func Test_GetTodosByStatus_MatchingStatus(t *testing.T) {
 	}
 }
 
-func Test_GetTodosByStatus_UnknownStatus(t *testing.T) {
+func Test_GetTasksByStatus_UnknownStatus(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-		{Content: "task", Status: "pending", ActiveForm: "Doing"},
+	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+		Subject: "task", Status: "pending", ActiveForm: "Doing",
 	})
 	if err := b.AppendEntry(entry); err != nil {
 		t.Fatalf("AppendEntry: %v", err)
 	}
 
-	results, err := b.GetTodosByStatus("nonexistent")
+	results, err := b.GetTasksByStatus("nonexistent")
 	if err != nil {
-		t.Fatalf("GetTodosByStatus: %v", err)
+		t.Fatalf("GetTasksByStatus: %v", err)
 	}
 
 	if len(results) != 0 {
-		t.Errorf("expected empty slice for unknown status, got %d todos", len(results))
+		t.Errorf("expected empty slice for unknown status, got %d tasks", len(results))
 	}
 }
 
-func Test_GetTodosByStatus_AcrossEntries(t *testing.T) {
+func Test_GetTasksByStatus_AcrossEntries(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
 	inputEntries := []storage.LogEntry{
-		makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-			{Content: "entry1-pending", Status: "pending", ActiveForm: "Doing entry1"},
-			{Content: "entry1-done", Status: "completed", ActiveForm: "Done entry1"},
+		makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "entry1-pending", Status: "pending", ActiveForm: "Doing entry1",
 		}),
-		makeEntry("2025-01-02T00:00:00Z", "s2", "/cwd", []storage.TodoItem{
-			{Content: "entry2-pending", Status: "pending", ActiveForm: "Doing entry2"},
+		makeEntry("2025-01-02T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "entry2-done", Status: "completed", ActiveForm: "Done entry2",
 		}),
-		makeEntry("2025-01-03T00:00:00Z", "s3", "/cwd", []storage.TodoItem{
-			{Content: "entry3-done", Status: "completed", ActiveForm: "Done entry3"},
-			{Content: "entry3-pending", Status: "pending", ActiveForm: "Doing entry3"},
+		makeEntry("2025-01-03T00:00:00Z", "s2", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "entry3-pending", Status: "pending", ActiveForm: "Doing entry3",
+		}),
+		makeEntry("2025-01-04T00:00:00Z", "s3", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "entry4-pending", Status: "pending", ActiveForm: "Doing entry4",
 		}),
 	}
 
@@ -865,13 +890,13 @@ func Test_GetTodosByStatus_AcrossEntries(t *testing.T) {
 		}
 	}
 
-	results, err := b.GetTodosByStatus("pending")
+	results, err := b.GetTasksByStatus("pending")
 	if err != nil {
-		t.Fatalf("GetTodosByStatus: %v", err)
+		t.Fatalf("GetTasksByStatus: %v", err)
 	}
 
 	if len(results) != 3 {
-		t.Fatalf("expected 3 pending todos across entries, got %d", len(results))
+		t.Fatalf("expected 3 pending tasks across entries, got %d", len(results))
 	}
 
 	for _, r := range results {
@@ -881,30 +906,30 @@ func Test_GetTodosByStatus_AcrossEntries(t *testing.T) {
 	}
 }
 
-func Test_GetTodosByStatus_CompleteStructure(t *testing.T) {
+func Test_GetTasksByStatus_CompleteStructure(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-		{Content: "my task", Status: "pending", ActiveForm: "Working on my task"},
+	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+		Subject: "my task", Status: "pending", ActiveForm: "Working on my task",
 	})
 
 	if err := b.AppendEntry(entry); err != nil {
 		t.Fatalf("AppendEntry: %v", err)
 	}
 
-	results, err := b.GetTodosByStatus("pending")
+	results, err := b.GetTasksByStatus("pending")
 	if err != nil {
-		t.Fatalf("GetTodosByStatus: %v", err)
+		t.Fatalf("GetTasksByStatus: %v", err)
 	}
 
 	if len(results) != 1 {
-		t.Fatalf("expected 1 todo, got %d", len(results))
+		t.Fatalf("expected 1 task, got %d", len(results))
 	}
 
 	got := results[0]
-	if got.Content != "my task" {
-		t.Errorf("Content: got %q, want %q", got.Content, "my task")
+	if got.Subject != "my task" {
+		t.Errorf("Subject: got %q, want %q", got.Subject, "my task")
 	}
 	if got.Status != "pending" {
 		t.Errorf("Status: got %q, want %q", got.Status, "pending")
@@ -914,25 +939,25 @@ func Test_GetTodosByStatus_CompleteStructure(t *testing.T) {
 	}
 }
 
-func Test_GetTodosByStatus_ActiveFormPreserved(t *testing.T) {
+func Test_GetTasksByStatus_ActiveFormPreserved(t *testing.T) {
 	t.Parallel()
 	b, _ := newTestBackend(t)
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-		{Content: "task", Status: "in_progress", ActiveForm: "Doing task"},
+	entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+		Subject: "task", Status: "in_progress", ActiveForm: "Doing task",
 	})
 
 	if err := b.AppendEntry(entry); err != nil {
 		t.Fatalf("AppendEntry: %v", err)
 	}
 
-	results, err := b.GetTodosByStatus("in_progress")
+	results, err := b.GetTasksByStatus("in_progress")
 	if err != nil {
-		t.Fatalf("GetTodosByStatus: %v", err)
+		t.Fatalf("GetTasksByStatus: %v", err)
 	}
 
 	if len(results) != 1 {
-		t.Fatalf("expected 1 todo, got %d", len(results))
+		t.Fatalf("expected 1 task, got %d", len(results))
 	}
 
 	if results[0].ActiveForm != "Doing task" {
@@ -970,44 +995,40 @@ func Test_AppendThenLoad_Roundtrip_Cases(t *testing.T) {
 		entries []storage.LogEntry
 	}{
 		{
-			name:    "single entry no todos",
-			entries: []storage.LogEntry{makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{})},
-		},
-		{
-			name: "single entry single todo",
+			name: "single entry minimal task",
 			entries: []storage.LogEntry{
-				makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-					{Content: "only-task", Status: "pending", ActiveForm: "Doing only-task"},
+				makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+					Subject: "only-task", Status: "pending", ActiveForm: "Doing only-task",
 				}),
 			},
 		},
 		{
-			name: "multiple entries mixed todos",
+			name: "multiple entries mixed tools",
 			entries: []storage.LogEntry{
-				makeEntry("2025-01-01T00:00:00Z", "s1", "/proj", []storage.TodoItem{
-					{Content: "a", Status: "pending", ActiveForm: "Doing a"},
-					{Content: "b", Status: "completed", ActiveForm: "Done b"},
+				makeEntry("2025-01-01T00:00:00Z", "s1", "/proj", "TaskCreate", storage.TaskItem{
+					Subject: "a", Status: "pending", ActiveForm: "Doing a",
 				}),
-				makeEntry("2025-01-02T00:00:00Z", "s2", "/proj2", []storage.TodoItem{}),
-				makeEntry("2025-01-03T00:00:00Z", "s1", "/proj", []storage.TodoItem{
-					{Content: "c", Status: "in_progress", ActiveForm: "Working c"},
+				makeEntry("2025-01-02T00:00:00Z", "s2", "/proj2", "TaskUpdate", storage.TaskItem{
+					ID: "1", Status: "completed",
+				}),
+				makeEntry("2025-01-03T00:00:00Z", "s1", "/proj", "TaskCreate", storage.TaskItem{
+					Subject: "c", Status: "in_progress", ActiveForm: "Working c",
 				}),
 			},
 		},
 		{
 			name: "unicode in all fields",
 			entries: []storage.LogEntry{
-				makeEntry("2025-06-15T12:00:00Z", "sess-unicode", "/home/user", []storage.TodoItem{
-					{Content: "tarea en espanol", Status: "pendiente", ActiveForm: "Haciendo tarea"},
-					{Content: "Japanese: chars", Status: "done", ActiveForm: "complete"},
+				makeEntry("2025-06-15T12:00:00Z", "sess-unicode", "/home/user", "TaskCreate", storage.TaskItem{
+					Subject: "tarea en espanol", Status: "pendiente", ActiveForm: "Haciendo tarea",
 				}),
 			},
 		},
 		{
 			name: "empty string fields",
 			entries: []storage.LogEntry{
-				makeEntry("", "", "", []storage.TodoItem{
-					{Content: "", Status: "", ActiveForm: ""},
+				makeEntry("", "", "", "", storage.TaskItem{
+					Subject: "", Status: "", ActiveForm: "",
 				}),
 			},
 		},
@@ -1044,14 +1065,14 @@ func Test_AppendThenLoad_Roundtrip_Cases(t *testing.T) {
 				if got.Cwd != want.Cwd {
 					t.Errorf("entry[%d] Cwd: got %q, want %q", i, got.Cwd, want.Cwd)
 				}
-				if len(got.Todos) != len(want.Todos) {
-					t.Fatalf("entry[%d] todos count: got %d, want %d", i, len(got.Todos), len(want.Todos))
+				if got.ToolName != want.ToolName {
+					t.Errorf("entry[%d] ToolName: got %q, want %q", i, got.ToolName, want.ToolName)
 				}
-				for j, wantTodo := range want.Todos {
-					gotTodo := got.Todos[j]
-					if gotTodo != wantTodo {
-						t.Errorf("entry[%d].todos[%d]: got %+v, want %+v", i, j, gotTodo, wantTodo)
-					}
+				if got.Task.Subject != want.Task.Subject {
+					t.Errorf("entry[%d] Task.Subject: got %q, want %q", i, got.Task.Subject, want.Task.Subject)
+				}
+				if got.Task.Status != want.Task.Status {
+					t.Errorf("entry[%d] Task.Status: got %q, want %q", i, got.Task.Status, want.Task.Status)
 				}
 			}
 		})
@@ -1069,9 +1090,8 @@ func Benchmark_AppendEntry(b *testing.B) {
 		b.Fatalf("NewSQLiteBackend: %v", err)
 	}
 
-	entry := makeEntry("2025-01-01T00:00:00Z", "bench-sess", "/cwd", []storage.TodoItem{
-		{Content: "task1", Status: "pending", ActiveForm: "Doing task1"},
-		{Content: "task2", Status: "completed", ActiveForm: "Done task2"},
+	entry := makeEntry("2025-01-01T00:00:00Z", "bench-sess", "/cwd", "TaskCreate", storage.TaskItem{
+		Subject: "task1", Status: "pending", ActiveForm: "Doing task1",
 	})
 
 	b.ResetTimer()
@@ -1090,8 +1110,8 @@ func Benchmark_LoadHistory(b *testing.B) {
 	}
 
 	for i := 0; i < 100; i++ {
-		entry := makeEntry("2025-01-01T00:00:00Z", "bench-sess", "/cwd", []storage.TodoItem{
-			{Content: "task", Status: "pending", ActiveForm: "Doing"},
+		entry := makeEntry("2025-01-01T00:00:00Z", "bench-sess", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "task", Status: "pending", ActiveForm: "Doing",
 		})
 		if err := backend.AppendEntry(entry); err != nil {
 			b.Fatalf("seed AppendEntry: %v", err)
@@ -1118,8 +1138,8 @@ func Benchmark_GetEntriesBySession(b *testing.B) {
 		if i%3 == 0 {
 			sess = "session-B"
 		}
-		entry := makeEntry("2025-01-01T00:00:00Z", sess, "/cwd", []storage.TodoItem{
-			{Content: "task", Status: "pending", ActiveForm: "Doing"},
+		entry := makeEntry("2025-01-01T00:00:00Z", sess, "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "task", Status: "pending", ActiveForm: "Doing",
 		})
 		if err := backend.AppendEntry(entry); err != nil {
 			b.Fatalf("seed AppendEntry: %v", err)
@@ -1134,7 +1154,7 @@ func Benchmark_GetEntriesBySession(b *testing.B) {
 	}
 }
 
-func Benchmark_GetTodosByStatus(b *testing.B) {
+func Benchmark_GetTasksByStatus(b *testing.B) {
 	dbPath := filepath.Join(b.TempDir(), "bench.db")
 	backend, err := storage.NewSQLiteBackend(dbPath)
 	if err != nil {
@@ -1146,8 +1166,8 @@ func Benchmark_GetTodosByStatus(b *testing.B) {
 		if i%2 == 0 {
 			status = "completed"
 		}
-		entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", []storage.TodoItem{
-			{Content: "task", Status: status, ActiveForm: "Doing"},
+		entry := makeEntry("2025-01-01T00:00:00Z", "s1", "/cwd", "TaskCreate", storage.TaskItem{
+			Subject: "task", Status: status, ActiveForm: "Doing",
 		})
 		if err := backend.AppendEntry(entry); err != nil {
 			b.Fatalf("seed AppendEntry: %v", err)
@@ -1156,8 +1176,8 @@ func Benchmark_GetTodosByStatus(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := backend.GetTodosByStatus("pending"); err != nil {
-			b.Fatalf("GetTodosByStatus: %v", err)
+		if _, err := backend.GetTasksByStatus("pending"); err != nil {
+			b.Fatalf("GetTasksByStatus: %v", err)
 		}
 	}
 }

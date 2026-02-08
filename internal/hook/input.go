@@ -1,7 +1,7 @@
 // Package hook handles parsing and processing of Claude Code hook events.
 //
 // This package is responsible for reading hook input from stdin, validating
-// TodoWrite events, and filtering todo items according to the required schema.
+// TaskCreate/TaskUpdate events, and extracting task data from tool input.
 package hook
 
 import (
@@ -13,13 +13,19 @@ import (
 	"github.com/JamesPrial/todo-log/internal/storage"
 )
 
+// acceptedTools is the set of tool names this hook processes.
+var acceptedTools = map[string]bool{
+	"TaskCreate": true,
+	"TaskUpdate": true,
+}
+
 // HookInput represents the JSON payload received from Claude Code on stdin.
 //
 // This structure matches the PostToolUse event format sent by Claude Code
 // when a tool is invoked. The ToolInput field contains the raw JSON from
 // the tool's parameters.
 type HookInput struct {
-	// ToolName is the name of the invoked tool (e.g., "TodoWrite").
+	// ToolName is the name of the invoked tool (e.g., "TaskCreate", "TaskUpdate").
 	ToolName string `json:"tool_name"`
 
 	// ToolInput is the raw JSON of the tool's input parameters.
@@ -34,11 +40,11 @@ type HookInput struct {
 
 // ReadHookInput reads and parses JSON from the given reader.
 //
-// Returns (nil, nil) if the event is not a TodoWrite event (caller should exit 0).
+// Returns (nil, nil) if the event is not a TaskCreate or TaskUpdate event (caller should exit 0).
 // Returns (nil, err) if the JSON is malformed.
-// Returns (*HookInput, nil) if valid TodoWrite event.
+// Returns (*HookInput, nil) if valid task event.
 //
-// When DEBUG env var is set, logs non-TodoWrite events to stderr.
+// When DEBUG env var is set, logs non-task events to stderr.
 func ReadHookInput(r io.Reader) (*HookInput, error) {
 	var input HookInput
 
@@ -47,11 +53,11 @@ func ReadHookInput(r io.Reader) (*HookInput, error) {
 		return nil, fmt.Errorf("failed to decode hook input: %w", err)
 	}
 
-	// Check if this is a TodoWrite event
-	if input.ToolName != "TodoWrite" {
+	// Check if this is a task event we care about
+	if !acceptedTools[input.ToolName] {
 		// Log if DEBUG is enabled
 		if os.Getenv("DEBUG") != "" {
-			fmt.Fprintf(os.Stderr, "Ignoring non-TodoWrite event: %s\n", input.ToolName)
+			fmt.Fprintf(os.Stderr, "Ignoring non-task event: %s\n", input.ToolName)
 		}
 		return nil, nil
 	}
@@ -59,55 +65,85 @@ func ReadHookInput(r io.Reader) (*HookInput, error) {
 	return &input, nil
 }
 
-// ValidateTodo checks whether a map has required keys: "content", "status", "activeForm".
+// ParseTaskInput extracts a TaskItem from raw tool_input JSON based on the tool name.
 //
-// Returns true if all three keys are present (values can be any type).
-// This ensures that todo items conform to the expected schema before being
-// converted to TodoItem structs.
-func ValidateTodo(item map[string]any) bool {
-	_, hasContent := item["content"]
-	_, hasStatus := item["status"]
-	_, hasActiveForm := item["activeForm"]
+// TaskCreate input format: {"subject":"...","description":"...","activeForm":"..."}
+//   - Status defaults to "pending"
+//
+// TaskUpdate input format: {"taskId":"1","status":"completed","subject":"...","addBlocks":["2"],...}
+//   - Maps taskId to ID, addBlocks to Blocks, addBlockedBy to BlockedBy
+//
+// Returns a zero-value TaskItem with status "pending" if raw input is nil or empty.
+func ParseTaskInput(toolName string, raw json.RawMessage) storage.TaskItem {
+	if len(raw) == 0 {
+		return storage.TaskItem{Status: "pending"}
+	}
 
-	return hasContent && hasStatus && hasActiveForm
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return storage.TaskItem{Status: "pending"}
+	}
+
+	task := storage.TaskItem{}
+
+	// Common fields
+	if v, ok := fields["subject"].(string); ok {
+		task.Subject = v
+	}
+	if v, ok := fields["description"].(string); ok {
+		task.Description = v
+	}
+	if v, ok := fields["activeForm"].(string); ok {
+		task.ActiveForm = v
+	}
+	if v, ok := fields["status"].(string); ok {
+		task.Status = v
+	}
+	if v, ok := fields["owner"].(string); ok {
+		task.Owner = v
+	}
+
+	// TaskUpdate-specific: taskId maps to ID
+	if v, ok := fields["taskId"].(string); ok {
+		task.ID = v
+	}
+
+	// Array fields
+	if v, ok := fields["addBlocks"]; ok {
+		task.Blocks = toStringSlice(v)
+	}
+	if v, ok := fields["addBlockedBy"]; ok {
+		task.BlockedBy = toStringSlice(v)
+	}
+
+	// Metadata
+	if v, ok := fields["metadata"].(map[string]any); ok {
+		task.Metadata = v
+	}
+
+	// Default status for TaskCreate
+	if toolName == "TaskCreate" && task.Status == "" {
+		task.Status = "pending"
+	}
+
+	return task
 }
 
-// ValidateTodos extracts and validates todos from raw tool_input JSON.
-//
-// Filters out items missing required keys. Returns empty slice if no valid todos.
-// Non-string values are converted to strings using fmt.Sprintf.
-// If rawToolInput is nil/empty or decode fails, returns an empty slice.
-func ValidateTodos(rawToolInput json.RawMessage) []storage.TodoItem {
-	// Handle nil or empty input
-	if len(rawToolInput) == 0 {
-		return make([]storage.TodoItem, 0)
+// toStringSlice converts an interface{} (expected to be []interface{}) to []string.
+// Returns nil if the input is not a valid string slice.
+func toStringSlice(v any) []string {
+	arr, ok := v.([]any)
+	if !ok || len(arr) == 0 {
+		return nil
 	}
-
-	// Decode the raw JSON into a structure with a todos field
-	var input struct {
-		Todos []map[string]any `json:"todos"`
-	}
-
-	if err := json.Unmarshal(rawToolInput, &input); err != nil {
-		return make([]storage.TodoItem, 0)
-	}
-
-	// Filter and convert valid todos
-	validTodos := make([]storage.TodoItem, 0)
-	for _, item := range input.Todos {
-		if !ValidateTodo(item) {
-			continue
+	result := make([]string, 0, len(arr))
+	for _, item := range arr {
+		if s, ok := item.(string); ok {
+			result = append(result, s)
 		}
-
-		// Extract fields and convert to strings
-		todo := storage.TodoItem{
-			Content:    fmt.Sprintf("%v", item["content"]),
-			Status:     fmt.Sprintf("%v", item["status"]),
-			ActiveForm: fmt.Sprintf("%v", item["activeForm"]),
-		}
-
-		validTodos = append(validTodos, todo)
 	}
-
-	return validTodos
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
