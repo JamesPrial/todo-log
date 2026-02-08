@@ -1,0 +1,82 @@
+[
+  {
+    "timestamp": "2026-02-08T17:43:42.915Z",
+    "session_id": "e89b03c5-d36a-4253-a27c-d06c904815e2",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Test the todo-log plugin",
+      "description": "Create several tasks to verify the PostToolUse hook fires and logs entries to the storage backend.",
+      "status": "pending",
+      "activeForm": "Testing todo-log plugin"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T17:43:43.144Z",
+    "session_id": "e89b03c5-d36a-4253-a27c-d06c904815e2",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Buy groceries",
+      "description": "Pick up milk, eggs, and bread from the store.",
+      "status": "pending",
+      "activeForm": "Buying groceries"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T17:43:44.288Z",
+    "session_id": "e89b03c5-d36a-4253-a27c-d06c904815e2",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Fix the flaky CI test",
+      "description": "The integration test in storage_test.go sometimes fails due to a race condition. Investigate and fix.",
+      "status": "pending",
+      "activeForm": "Fixing flaky CI test"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T17:43:47.292Z",
+    "session_id": "e89b03c5-d36a-4253-a27c-d06c904815e2",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "1",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T17:43:57.661Z",
+    "session_id": "e89b03c5-d36a-4253-a27c-d06c904815e2",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "1",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T17:44:33.899Z",
+    "session_id": "e89b03c5-d36a-4253-a27c-d06c904815e2",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "2",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T17:44:34.105Z",
+    "session_id": "e89b03c5-d36a-4253-a27c-d06c904815e2",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "3",
+      "subject": "",
+      "status": "completed"
+    }
+  }
+]
