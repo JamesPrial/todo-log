@@ -3,6 +3,7 @@ package pathutil_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -170,9 +171,14 @@ func Test_ResolveSafePath_Cases(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:     "absolute path escaping",
-			userPath: func(_ string) string { return "/etc/passwd" },
-			wantErr:  true,
+			name: "absolute path escaping",
+			userPath: func(_ string) string {
+				if runtime.GOOS == "windows" {
+					return `C:\Windows\System32\config\SAM`
+				}
+				return "/etc/passwd"
+			},
+			wantErr: true,
 		},
 		{
 			name:     "empty string",

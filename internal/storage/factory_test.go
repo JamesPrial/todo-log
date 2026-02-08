@@ -2,11 +2,22 @@ package storage_test
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/JamesPrial/todo-log/internal/storage"
 )
+
+// windowsOrUnixPath returns winPath on Windows, unixPath otherwise.
+// Used in path-escape tests where Unix absolute paths like "/etc/passwd"
+// are not actually absolute on Windows (no drive letter).
+func windowsOrUnixPath(unixPath, winPath string) string {
+	if runtime.GOOS == "windows" {
+		return winPath
+	}
+	return unixPath
+}
 
 // ---------------------------------------------------------------------------
 // GetStorageBackend: backend type selection
@@ -100,7 +111,7 @@ func Test_GetStorageBackend_Cases(t *testing.T) {
 		{
 			name:          "SQLite absolute path escape rejected",
 			envBackend:    "sqlite",
-			envSQLitePath: "/etc/evil.db",
+			envSQLitePath: windowsOrUnixPath("/etc/evil.db", `C:\Windows\evil.db`),
 			wantErr:       true,
 			setBackend:    true,
 			setSQLitePath: true,
@@ -445,7 +456,7 @@ func Test_GetStorageBackend_PathEscape_Cases(t *testing.T) {
 		{
 			name:       "JSON absolute path outside project",
 			envBackend: "json",
-			envLogPath: "/tmp/outside.json",
+			envLogPath: windowsOrUnixPath("/tmp/outside.json", `C:\Windows\outside.json`),
 		},
 		{
 			name:          "SQLite parent traversal",
@@ -455,7 +466,7 @@ func Test_GetStorageBackend_PathEscape_Cases(t *testing.T) {
 		{
 			name:          "SQLite absolute path outside project",
 			envBackend:    "sqlite",
-			envSQLitePath: "/tmp/outside.db",
+			envSQLitePath: windowsOrUnixPath("/tmp/outside.db", `C:\Windows\outside.db`),
 		},
 		{
 			name:       "JSON complex traversal",
