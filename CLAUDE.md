@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is the **todo-log** plugin (v2.0.0) for Claude Code. Rewritten in Go for compiled binary distribution. It automatically logs TodoWrite tool usage using a PostToolUse hook. Supports both JSON file and SQLite database backends.
+This is the **todo-log** plugin for Claude Code. Written in Go for compiled binary distribution. It automatically logs TodoWrite tool usage using a PostToolUse hook. Supports both JSON file and SQLite database backends.
 
 ## Development Commands
 
@@ -65,6 +65,25 @@ save-todos: reads stdin JSON → validates todos → appends to storage backend
   - `sqlite_backend.go` - SQLite database backend with query support
 - `Makefile` - Build and test commands
 - `go.mod` - Go module (`modernc.org/sqlite` for pure-Go SQLite)
+
+### Release & Distribution
+
+Binary distribution uses a **releases branch strategy**:
+
+- `main` branch: source code only (`bin/` is gitignored)
+- `releases` branch: orphan branch with pre-built binaries for all platforms + a wrapper script
+- Marketplace (`prial-plugins`) pins to `releases` branch via `ref` + `sha`
+
+**Release flow:**
+1. Tag on main: `git tag vX.Y.Z && git push origin vX.Y.Z`
+2. GitHub Actions (`.github/workflows/release.yml`) cross-compiles 5 platform binaries
+3. Composes a release tree: wrapper script (`bin/save-todos`) + platform binaries + plugin metadata
+4. Force-pushes to orphan `releases` branch
+5. Prints the new SHA for marketplace.json update
+
+**Wrapper script** (`bin/save-todos` on releases branch): detects `uname -s`/`uname -m`, dispatches to the correct `save-todos-{os}-{arch}` binary via `exec`.
+
+**Supported platforms:** darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, windows/amd64
 
 ### Environment Variables
 

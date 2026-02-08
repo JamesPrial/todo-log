@@ -17,17 +17,19 @@ This plugin hooks into Claude Code's TodoWrite tool usage and maintains a compre
 
 ## Installation
 
-### From Local Marketplace
+### From Marketplace
 
-1. Add your local marketplace:
+1. Add the marketplace:
    ```bash
-   /plugin marketplace add ./path/to/marketplace
+   /plugin marketplace add JamesPrial/prial-plugins
    ```
 
 2. Install the plugin:
    ```bash
-   /plugin install todo-log@marketplace-name
+   /plugin install todo-log@prial-plugins
    ```
+
+Pre-built binaries for macOS (Intel/Apple Silicon), Linux (x86_64/ARM64), and Windows (x86_64) are included automatically.
 
 ### Manual Installation
 
@@ -165,35 +167,25 @@ make cover    # Run tests with coverage
 make clean    # Remove binary
 ```
 
-### Plugin Structure
+### Releasing
 
-```
-todo-log/
-├── .claude-plugin/
-│   └── plugin.json          # Plugin manifest
-├── hooks/
-│   └── hooks.json           # Hook configuration
-├── cmd/
-│   └── save-todos/
-│       └── main.go          # CLI entry point
-├── internal/
-│   ├── hook/                # Hook input processing
-│   │   ├── input.go         # Stdin parsing, todo validation
-│   │   └── entry.go         # LogEntry construction
-│   ├── pathutil/
-│   │   └── safepath.go      # Path traversal protection
-│   └── storage/
-│       ├── types.go         # Types and interfaces
-│       ├── factory.go       # Backend factory
-│       ├── json_backend.go  # JSON file backend
-│       └── sqlite_backend.go # SQLite database backend
-├── bin/
-│   └── save-todos           # Compiled binary (gitignored)
-├── go.mod
-├── Makefile
-├── LICENSE
-└── README.md
-```
+Releases are automated via GitHub Actions. To create a new release:
+
+1. Tag and push: `git tag v2.1.0 && git push origin v2.1.0`
+2. CI builds cross-platform binaries and pushes them to the `releases` branch
+3. Update the SHA in `prial-plugins` marketplace.json with the value printed by the workflow
+
+The `releases` branch is an orphan branch containing only the plugin metadata and pre-built binaries for all platforms. A wrapper script at `bin/save-todos` detects the platform and dispatches to the correct binary. The marketplace pins to this branch via `ref` + `sha` for integrity.
+
+### Supported Platforms
+
+| OS | Architecture | Binary |
+|----|-------------|--------|
+| macOS | x86_64 | `save-todos-darwin-amd64` |
+| macOS | Apple Silicon | `save-todos-darwin-arm64` |
+| Linux | x86_64 | `save-todos-linux-amd64` |
+| Linux | ARM64 | `save-todos-linux-arm64` |
+| Windows | x86_64 | `save-todos-windows-amd64.exe` |
 
 ### Testing Locally
 
