@@ -4,31 +4,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is the **todo-log** plugin (v1.0.1) for Claude Code. It automatically logs TodoWrite tool usage using a PostToolUse hook. Supports both JSON file and SQLite database backends.
+This is the **todo-log** plugin (v2.0.0) for Claude Code. Rewritten in Go for compiled binary distribution. It automatically logs TodoWrite tool usage using a PostToolUse hook. Supports both JSON file and SQLite database backends.
 
 ## Development Commands
 
 ```bash
-# Run all tests (main + storage package)
-cd scripts && PYTHONPATH=. python -m pytest test_save_todos.py storage/tests/ -v
+# Build the binary
+make build
 
-# Run only main tests
-python -m pytest scripts/test_save_todos.py -v
+# Run all tests
+make test
 
-# Run only storage backend tests
-cd scripts && PYTHONPATH=. python -m pytest storage/tests/ -v
+# Run tests with coverage
+make cover
 
-# Run a single test
-python -m pytest scripts/test_save_todos.py::TestValidateTodo::test_valid_todo_with_all_keys -v
+# Run specific package tests
+go test -v ./internal/hook/...
+go test -v ./internal/storage/...
+
+# Clean build artifacts
+make clean
 ```
 
 ## Testing Plugin Changes
 
-1. Make changes to `scripts/save_todos.py`
-2. Uninstall: `/plugin uninstall todo-log`
-3. Reinstall: `/plugin install todo-log@<marketplace-name>`
-4. Trigger TodoWrite in Claude Code
-5. Check `.claude/todos.json` or use `claude --debug` for hook output
+1. Make changes to Go source files
+2. Rebuild: `make build`
+3. Uninstall: `/plugin uninstall todo-log`
+4. Reinstall: `/plugin install todo-log@<marketplace-name>`
+5. Trigger TodoWrite in Claude Code
+6. Check `.claude/todos.json` or use `claude --debug` for hook output
 
 ## Architecture
 
@@ -39,22 +44,27 @@ TodoWrite tool invoked
     ↓
 PostToolUse event fires
     ↓
-hooks.json matches "TodoWrite" → runs save_todos.py
+hooks.json matches "TodoWrite" → runs bin/save-todos
     ↓
-save_todos.py: reads stdin JSON → validates todos → appends to log file
+save-todos: reads stdin JSON → validates todos → appends to storage backend
 ```
 
 ### Key Files
 
 - `hooks/hooks.json` - Hook configuration (PostToolUse on TodoWrite)
-- `scripts/save_todos.py` - Main hook script (Python 3.10+, stdlib only)
-- `scripts/storage/` - Storage backend package
-  - `protocol.py` - TypedDicts and Protocol definitions
-  - `json_backend.py` - JSON file storage backend
-  - `sqlite_backend.py` - SQLite database backend with query support
-  - `__init__.py` - Backend factory function
-- `scripts/test_save_todos.py` - Main test suite (80+ tests)
-- `scripts/storage/tests/` - Storage backend tests (100+ tests)
+- `cmd/save-todos/main.go` - CLI entry point (`run(stdin io.Reader) int`)
+- `internal/hook/` - Hook input processing
+  - `input.go` - Stdin JSON parsing, todo validation
+  - `entry.go` - LogEntry construction, timestamps
+- `internal/pathutil/` - Security utilities
+  - `safepath.go` - Path traversal protection
+- `internal/storage/` - Storage backend package
+  - `types.go` - TodoItem, LogEntry structs, StorageBackend interface
+  - `factory.go` - Backend factory (`GetStorageBackend`)
+  - `json_backend.go` - JSON file storage backend
+  - `sqlite_backend.go` - SQLite database backend with query support
+- `Makefile` - Build and test commands
+- `go.mod` - Go module (`modernc.org/sqlite` for pure-Go SQLite)
 
 ### Environment Variables
 
@@ -75,7 +85,7 @@ save_todos.py: reads stdin JSON → validates todos → appends to log file
 
 **SQLite Backend**:
 - Normalized tables: `log_entries` and `todos`
-- Query methods: `get_entries_by_session()`, `get_todos_by_status()`
+- Query methods: `GetEntriesBySession()`, `GetTodosByStatus()`
 - WAL mode for concurrent access
 - Better for querying and large datasets
 
@@ -86,10 +96,10 @@ save_todos.py: reads stdin JSON → validates todos → appends to log file
 
 ### Security
 
-- Path traversal protection: `resolve_safe_path()` prevents escaping project directory
+- Path traversal protection: `ResolveSafePath()` prevents escaping project directory
 - Symlink resolution: Symlinks pointing outside project are rejected
 - Null byte handling: Paths with null bytes are rejected
-- Atomic writes: Uses temp file + `os.replace()` for crash safety
+- Atomic writes: Uses temp file + `os.Rename()` for crash safety
 
 ### Log Entry Format
 
@@ -106,11 +116,17 @@ save_todos.py: reads stdin JSON → validates todos → appends to log file
 
 ## Key Patterns
 
-### Zero Dependencies
-Uses only Python stdlib - no pip install required.
+### Minimal Dependencies
+Only external dependency is `modernc.org/sqlite` (pure Go, no CGO) for the SQLite backend.
 
 ### Fail-Safe Design
 PostToolUse hooks never block tool execution. Errors exit with code 1 but don't interrupt Claude.
 
 ### Graceful Recovery
 Corrupted JSON files are handled by starting fresh (empty array).
+
+### Idiomatic Go
+- Proper error handling with context wrapping
+- Interface-based storage abstraction
+- Table-driven tests for comprehensive coverage
+- Nil-safe operations throughout

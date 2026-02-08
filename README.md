@@ -13,6 +13,7 @@ This plugin hooks into Claude Code's TodoWrite tool usage and maintains a compre
 - **Session Tracking**: Records session ID and working directory for context
 - **Non-Intrusive**: Runs silently in the background via PostToolUse hook
 - **Persistent Storage**: Maintains complete history across sessions
+- **Dual Backends**: JSON (default) or SQLite for querying large datasets
 
 ## Installation
 
@@ -77,19 +78,14 @@ export TODO_SQLITE_PATH=data/todos.db
 
 ### SQLite Query Features
 
-When using SQLite backend, you can query your todos programmatically:
+When using the SQLite backend, you can query your todos directly:
 
-```python
-from storage.sqlite_backend import SQLiteStorageBackend
-from pathlib import Path
-
-backend = SQLiteStorageBackend(Path(".claude/todos.db"))
-
+```bash
 # Get all entries from a specific session
-entries = backend.get_entries_by_session("session-abc123")
+sqlite3 .claude/todos.db "SELECT e.timestamp, t.content, t.status FROM log_entries e JOIN todos t ON e.id = t.entry_id WHERE e.session_id = 'session-abc123'"
 
 # Get all pending todos across all sessions
-pending = backend.get_todos_by_status("pending")
+sqlite3 .claude/todos.db "SELECT content, active_form FROM todos WHERE status = 'pending'"
 ```
 
 ## Output Format
@@ -151,20 +147,23 @@ jq '.' .claude/todos.json
 2. Check hook registration: `/hooks`
 3. Run Claude with debug flag: `claude --debug`
 
-### Permission Errors
-
-Ensure the script is executable:
-
-```bash
-chmod +x todo-log/scripts/save-todos.py
-```
-
 ### Log File Not Created
 
 - Verify `CLAUDE_PROJECT_DIR` environment variable is set
 - Check Claude Code has write permissions in your project directory
 
 ## Development
+
+### Building from Source
+
+Requires Go 1.22+:
+
+```bash
+make build    # Build bin/save-todos
+make test     # Run tests with race detection
+make cover    # Run tests with coverage
+make clean    # Remove binary
+```
 
 ### Plugin Structure
 
@@ -174,23 +173,31 @@ todo-log/
 │   └── plugin.json          # Plugin manifest
 ├── hooks/
 │   └── hooks.json           # Hook configuration
-├── scripts/
-│   ├── save_todos.py        # Main hook entry point
-│   ├── test_save_todos.py   # Main test suite
-│   └── storage/             # Storage backend package
-│       ├── __init__.py      # Backend factory
-│       ├── protocol.py      # Types and protocols
-│       ├── json_backend.py  # JSON file backend
-│       ├── sqlite_backend.py # SQLite database backend
-│       └── tests/           # Backend tests
+├── cmd/
+│   └── save-todos/
+│       └── main.go          # CLI entry point
+├── internal/
+│   ├── hook/                # Hook input processing
+│   │   ├── input.go         # Stdin parsing, todo validation
+│   │   └── entry.go         # LogEntry construction
+│   ├── pathutil/
+│   │   └── safepath.go      # Path traversal protection
+│   └── storage/
+│       ├── types.go         # Types and interfaces
+│       ├── factory.go       # Backend factory
+│       ├── json_backend.go  # JSON file backend
+│       └── sqlite_backend.go # SQLite database backend
+├── bin/
+│   └── save-todos           # Compiled binary (gitignored)
+├── go.mod
+├── Makefile
 ├── LICENSE
 └── README.md
 ```
 
 ### Testing Locally
 
-1. Create a local marketplace with `marketplace.json`
+1. Build: `make build`
 2. Install the plugin in test mode
 3. Use TodoWrite in Claude Code
 4. Verify `.claude/todos.json` is created and updated
-
