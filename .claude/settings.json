@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "golang-workflow@plugins-by-james": true
+  }
+}
