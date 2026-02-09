@@ -12,9 +12,10 @@ import (
 // GetStorageBackend returns the configured storage backend based on environment variables.
 //
 // Environment variables:
-//   - TODO_STORAGE_BACKEND: "json" (default) or "sqlite"
+//   - TODO_STORAGE_BACKEND: "json" (default), "sqlite", or "postgres"
 //   - TODO_LOG_PATH: custom JSON log path (default: <projectDir>/.claude/todos.json)
 //   - TODO_SQLITE_PATH: custom SQLite path (default: <projectDir>/.claude/todos.db)
+//   - TODO_POSTGRES_URL: PostgreSQL connection string (required for postgres backend)
 //
 // Returns error if backend type is unknown or custom path escapes projectDir.
 func GetStorageBackend(projectDir string) (StorageBackend, error) {
@@ -39,8 +40,15 @@ func GetStorageBackend(projectDir string) (StorageBackend, error) {
 		}
 		return NewSQLiteBackend(path)
 
+	case "postgres", "postgresql":
+		connStr, err := getPostgresConnString()
+		if err != nil {
+			return nil, fmt.Errorf("failed to determine PostgreSQL connection string: %w", err)
+		}
+		return NewPostgresBackend(connStr)
+
 	default:
-		return nil, fmt.Errorf("unknown storage backend: %q. Expected 'json' or 'sqlite'", backendType)
+		return nil, fmt.Errorf("unknown storage backend: %q. Expected 'json', 'sqlite', or 'postgres'", backendType)
 	}
 }
 
@@ -86,4 +94,22 @@ func getSQLitePath(projectDir string) (string, error) {
 
 	// Use default path
 	return filepath.Join(projectDir, ".claude", "todos.db"), nil
+}
+
+// getPostgresConnString returns the PostgreSQL connection string.
+//
+// Reads TODO_POSTGRES_URL environment variable. Unlike file-based backends,
+// PostgreSQL requires an explicit connection string; there is no default.
+//
+// Connection string format examples:
+//   - postgres://user:password@localhost:5432/dbname
+//   - postgresql://user:password@localhost/dbname?sslmode=disable
+//
+// Returns an error if TODO_POSTGRES_URL is not set.
+func getPostgresConnString() (string, error) {
+	connStr := strings.TrimSpace(os.Getenv("TODO_POSTGRES_URL"))
+	if connStr == "" {
+		return "", fmt.Errorf("TODO_POSTGRES_URL environment variable is required for postgres backend")
+	}
+	return connStr, nil
 }

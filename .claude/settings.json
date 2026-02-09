@@ -1,5 +1,6 @@
 {
   "enabledPlugins": {
-    "golang-workflow@plugins-by-james": true
+    "golang-workflow@plugins-by-james": true,
+    "golang-workflow@prial-plugins": true
   }
 }

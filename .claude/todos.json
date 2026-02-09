@@ -78,5 +78,597 @@
       "subject": "",
       "status": "completed"
     }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:04.618Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Create directory structure",
+      "description": "mkdir -p skills/go-plugin-release/{references,assets}",
+      "status": "pending",
+      "activeForm": "Creating directory structure"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:05.414Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Write assets/Makefile.tmpl",
+      "description": "Parameterized Makefile template with {{BINARY_NAME}}, {{MODULE_PATH}}, {{CMD_PATH}}",
+      "status": "pending",
+      "activeForm": "Writing Makefile template"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:06.107Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Write assets/ci.yml.tmpl",
+      "description": "Parameterized CI workflow template from .github/workflows/ci.yml",
+      "status": "pending",
+      "activeForm": "Writing CI workflow template"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:06.951Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Write assets/release.yml.tmpl",
+      "description": "Parameterized release workflow template - the largest and most critical file",
+      "status": "pending",
+      "activeForm": "Writing release workflow template"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:07.711Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Write assets/wrapper.sh.tmpl",
+      "description": "Platform detection wrapper script template with {{BINARY_NAME}}",
+      "status": "pending",
+      "activeForm": "Writing wrapper script template"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:08.533Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Write references/release-workflow-details.md",
+      "description": "Deep-dive walkthrough of each release.yml step with rationale",
+      "status": "pending",
+      "activeForm": "Writing release workflow reference"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:09.394Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Write references/troubleshooting.md",
+      "description": "Common issues organized by category: build, wrapper, orphan branch, marketplace, CI",
+      "status": "pending",
+      "activeForm": "Writing troubleshooting reference"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:10.469Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Write SKILL.md",
+      "description": "Core skill file with frontmatter (third-person description, trigger phrases) and body (imperative form, ~1800 words)",
+      "status": "pending",
+      "activeForm": "Writing SKILL.md"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:11.418Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Run skill-reviewer agent for validation",
+      "description": "Use the skill-reviewer agent to validate the skill follows best practices",
+      "status": "pending",
+      "activeForm": "Running skill review"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:14.683Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "1",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:20.744Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "1",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:21.468Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "2",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:21.772Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "3",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:21.884Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "4",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:22.210Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "5",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:57.064Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "2",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:57.354Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "3",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:57.714Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "4",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:58.139Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "5",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:58.542Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "6",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:20:59.058Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "7",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:22:33.163Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "6",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:22:33.573Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "7",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:22:33.915Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "8",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:23:21.921Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "8",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:23:22.235Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "9",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-08T19:25:40.901Z",
+    "session_id": "89a27ca1-9cba-4c09-bd27-578eddc4212e",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "9",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:54:29.776Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Add pgx and testcontainers dependencies",
+      "description": "Run go get for github.com/jackc/pgx/v5 and testcontainers-go",
+      "status": "pending",
+      "activeForm": "Adding dependencies"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:54:32.660Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Create postgres_backend.go",
+      "description": "Implement PostgresBackend struct with all QueryableStorageBackend methods using pgx native API",
+      "status": "pending",
+      "activeForm": "Creating PostgreSQL backend"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:54:35.974Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Update factory.go for postgres support",
+      "description": "Add postgres/postgresql cases to factory switch and getPostgresConnString helper",
+      "status": "pending",
+      "activeForm": "Updating factory"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:54:39.027Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Create postgres_backend_test.go",
+      "description": "Write comprehensive integration tests using testcontainers-go, mirroring sqlite_backend_test.go structure",
+      "status": "pending",
+      "activeForm": "Writing PostgreSQL tests"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:54:42.406Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Update factory_test.go for postgres",
+      "description": "Fix unknown backend test (postgres is now valid), add missing env var error tests",
+      "status": "pending",
+      "activeForm": "Updating factory tests"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:54:45.375Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Verify build and tests",
+      "description": "Run make build, make test, go vet, and cross-compilation check",
+      "status": "pending",
+      "activeForm": "Verifying build and tests"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:54:48.512Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "1",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:55:14.570Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "1",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:55:17.787Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "2",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:55:18.174Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "3",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:56:55.054Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "2",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:56:55.374Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "3",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:57:10.479Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "4",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T01:57:10.776Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "5",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:01:48.997Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "4",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:01:49.368Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "5",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:01:49.780Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "6",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:02:34.308Z",
+    "session_id": "b9b25b69-c9d6-4846-b747-4f0b0a0faf04",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "6",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:34:51.378Z",
+    "session_id": "813215c7-ac63-48ad-bef3-f5a64ceb2c34",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Rewrite postgres_backend_test.go with BDD-style user stories",
+      "description": "Rewrite the test file with 15 behavior-driven tests, assertion helpers, and drop all raw SQL/schema inspection tests per the plan.",
+      "status": "pending",
+      "activeForm": "Rewriting postgres backend tests"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:34:54.512Z",
+    "session_id": "813215c7-ac63-48ad-bef3-f5a64ceb2c34",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskCreate",
+    "task": {
+      "subject": "Verify all tests compile and pass",
+      "description": "Run go vet, compile check, and make test to ensure existing tests still pass and new tests compile correctly.",
+      "status": "pending",
+      "activeForm": "Verifying tests compile and pass"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:34:57.321Z",
+    "session_id": "813215c7-ac63-48ad-bef3-f5a64ceb2c34",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "2",
+      "subject": "",
+      "status": "",
+      "blockedBy": [
+        "1"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:35:00.053Z",
+    "session_id": "813215c7-ac63-48ad-bef3-f5a64ceb2c34",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "1",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:36:51.356Z",
+    "session_id": "813215c7-ac63-48ad-bef3-f5a64ceb2c34",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "1",
+      "subject": "",
+      "status": "completed"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:36:51.749Z",
+    "session_id": "813215c7-ac63-48ad-bef3-f5a64ceb2c34",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "2",
+      "subject": "",
+      "status": "in_progress"
+    }
+  },
+  {
+    "timestamp": "2026-02-09T02:46:18.497Z",
+    "session_id": "813215c7-ac63-48ad-bef3-f5a64ceb2c34",
+    "cwd": "/Users/jamesprial/code/plugins/todo-log",
+    "tool_name": "TaskUpdate",
+    "task": {
+      "id": "2",
+      "subject": "",
+      "status": "completed"
+    }
   }
 ]

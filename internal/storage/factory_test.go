@@ -69,7 +69,7 @@ func Test_GetStorageBackend_Cases(t *testing.T) {
 		},
 		{
 			name:        "unknown backend returns error",
-			envBackend:  "postgres",
+			envBackend:  "redis",
 			wantErr:     true,
 			errContains: "unknown",
 			setBackend:  true,
@@ -136,6 +136,20 @@ func Test_GetStorageBackend_Cases(t *testing.T) {
 			wantJSON:   true,
 			setBackend: true,
 		},
+		{
+			name:        "postgres without URL returns error",
+			envBackend:  "postgres",
+			wantErr:     true,
+			errContains: "TODO_POSTGRES_URL",
+			setBackend:  true,
+		},
+		{
+			name:        "postgresql alias without URL returns error",
+			envBackend:  "postgresql",
+			wantErr:     true,
+			errContains: "TODO_POSTGRES_URL",
+			setBackend:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -161,6 +175,9 @@ func Test_GetStorageBackend_Cases(t *testing.T) {
 			} else {
 				t.Setenv("TODO_SQLITE_PATH", "")
 			}
+
+			// Always clear postgres URL unless test explicitly sets it
+			t.Setenv("TODO_POSTGRES_URL", "")
 
 			backend, err := storage.GetStorageBackend(projectDir)
 
