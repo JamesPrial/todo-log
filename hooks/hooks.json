@@ -1,0 +1,17 @@
+{
+  "description": "Capture TaskCreate/TaskUpdate tool usage and save to timestamped history",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "TaskCreate|TaskUpdate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/save-todos",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
