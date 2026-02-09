@@ -15,6 +15,7 @@ This plugin hooks into Claude Code's TaskCreate and TaskUpdate tool usage and ma
 - **Persistent Storage**: Maintains complete history across sessions
 - **Dual Backends**: JSON (default) or SQLite for querying large datasets
 - **Rich Task Model**: Tracks subject, description, status, owner, dependencies, and metadata
+- **MCP Database Server**: Integrated PostgreSQL server with 9 tools for database queries, schema introspection, and CRUD operations
 
 ## Installation
 
@@ -94,6 +95,45 @@ sqlite3 .claude/todos.db "SELECT subject, active_form FROM log_entries WHERE sta
 sqlite3 .claude/todos.db "SELECT subject, status, blocks, blocked_by FROM log_entries WHERE blocks != '[]' OR blocked_by != '[]'"
 ```
 
+## MCP Database Server
+
+The plugin includes a standalone MCP (Model Context Protocol) server for advanced database operations:
+
+### Available Tools
+
+- **Database Management**
+  - `start_postgres` — Start an ephemeral PostgreSQL container with automatic cleanup
+  - `stop_postgres` — Stop the running PostgreSQL container
+  - `postgres_status` — Check container status and connection details
+
+- **Query & Schema**
+  - `execute_query` — Run parameterized SQL queries with automatic type conversion
+  - `list_tables` — List all tables in the database
+  - `describe_table` — Get column definitions, types, and constraints
+
+- **Data Operations**
+  - `insert_rows` — Parameterized INSERT with multiple row support and automatic type conversion
+  - `update_rows` — Parameterized UPDATE with WHERE conditions
+  - `delete_rows` — Parameterized DELETE with WHERE conditions
+
+### Usage
+
+The MCP server is automatically registered when the plugin is installed. Use it in Claude Code to execute SQL operations on an isolated PostgreSQL database:
+
+```
+User: Create a table for users with email and name columns
+Claude: <uses insert_rows tool>
+
+User: Show me all users with their emails
+Claude: <uses execute_query tool>
+```
+
+### Security
+
+- **SQL Injection Prevention**: All tools use parameterized queries with identifier validation
+- **Ephemeral Containers**: PostgreSQL runs in isolated testcontainers that are automatically cleaned up
+- **No Persistent Data**: Containers are disposable for testing and development
+
 ## Output Format
 
 The plugin saves data to `.claude/todos.json` in the following format:
@@ -165,10 +205,12 @@ jq '.' .claude/todos.json
 Requires Go 1.22+:
 
 ```bash
-make build    # Build bin/save-todos
-make test     # Run tests with race detection
-make cover    # Run tests with coverage
-make clean    # Remove binary
+make build        # Build bin/save-todos (hook binary)
+make build-mcp    # Build bin/mcp-server (database server)
+make build-all    # Build both binaries
+make test         # Run tests with race detection
+make cover        # Run tests with coverage
+make clean        # Remove binaries
 ```
 
 ### Releasing

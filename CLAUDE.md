@@ -4,15 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is the **todo-log** plugin for Claude Code. Written in Go for compiled binary distribution. It automatically logs TaskCreate/TaskUpdate tool usage using a PostToolUse hook. Supports both JSON file and SQLite database backends.
+This is the **todo-log** plugin for Claude Code. Written in Go for compiled binary distribution. It consists of two components:
+1. **save-todos hook** — PostToolUse hook that logs TaskCreate/TaskUpdate tool usage to JSON or SQLite
+2. **mcp-server** — MCP server providing 9 tools for PostgreSQL database operations with ephemeral container management
 
 ## Development Commands
 
 ```bash
-# Build the binary
+# Build the save-todos hook binary
 make build
 
-# Run all tests
+# Build the MCP server binary
+make build-mcp
+
+# Build both binaries
+make build-all
+
+# Run all tests (including MCP server tests)
 make test
 
 # Run tests with coverage
@@ -21,6 +29,7 @@ make cover
 # Run specific package tests
 go test -v ./internal/hook/...
 go test -v ./internal/storage/...
+go test -v ./internal/mcpserver/...
 
 # Clean build artifacts
 make clean
@@ -51,6 +60,7 @@ save-todos: reads stdin JSON → parses task input → appends to storage backen
 
 ### Key Files
 
+**Hook System (save-todos)**
 - `hooks/hooks.json` - Hook configuration (PostToolUse on TaskCreate|TaskUpdate)
 - `cmd/save-todos/main.go` - CLI entry point (`run(stdin io.Reader) int`)
 - `internal/hook/` - Hook input processing
@@ -63,8 +73,20 @@ save-todos: reads stdin JSON → parses task input → appends to storage backen
   - `factory.go` - Backend factory (`GetStorageBackend`)
   - `json_backend.go` - JSON file storage backend
   - `sqlite_backend.go` - SQLite database backend with query support
-- `Makefile` - Build and test commands
-- `go.mod` - Go module (`modernc.org/sqlite` for pure-Go SQLite)
+
+**MCP Server (mcp-server)**
+- `.mcp.json` - MCP server registration and configuration
+- `cmd/mcp-server/main.go` - MCP server entry point
+- `internal/mcpserver/` - MCP server package
+  - `server.go` - Server creation and initialization
+  - `tools.go` - 9 MCP tool definitions
+  - `container.go` - PostgreSQL container lifecycle (start/stop/status) via testcontainers-go
+  - `query.go` - SQL execution and schema introspection helpers
+  - `crud.go` - Parameterized INSERT/UPDATE/DELETE with SQL injection prevention
+
+**Build & Configuration**
+- `Makefile` - Build targets: `build`, `build-mcp`, `build-all`
+- `go.mod` - Go module (dependencies: `modernc.org/sqlite`, `github.com/mark3labs/mcp-go`)
 
 ### Release & Distribution
 

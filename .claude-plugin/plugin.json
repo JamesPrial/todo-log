@@ -1,6 +1,6 @@
 {
   "name": "todo-log",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Captures TaskCreate/TaskUpdate tool usage and saves to timestamped history with configurable storage backend (JSON or SQLite)",
   "author": {
     "name": "James Prial",

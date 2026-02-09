@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "todo-log-postgres": {
+      "type": "stdio",
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/mcp-server"
+    }
+  }
+}

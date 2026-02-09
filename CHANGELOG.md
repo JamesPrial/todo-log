@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-02-08
+
+### Added
+- **MCP Server**: Standalone `bin/mcp-server` binary providing Claude-native database tools via Model Context Protocol
+- **9 MCP Tools**: start_postgres, stop_postgres, postgres_status, execute_query, list_tables, describe_table, insert_rows, update_rows, delete_rows
+- **Ephemeral PostgreSQL**: Automatic container lifecycle management using testcontainers-go for isolated database testing
+- **SQL Helpers**: Parameterized CRUD operations (INSERT/UPDATE/DELETE) with SQL injection prevention via identifier validation
+- **Schema Introspection**: Tools to list tables and describe table schemas for dynamic SQL generation
+- **MCP Server Registration**: `.mcp.json` plugin metadata for MCP server configuration
+
+### Changed
+- **Build System**: New Makefile targets `build-mcp` and `build-all` for flexible compilation (save-todos, mcp-server, or both)
+- **Dependencies**: Added `github.com/mark3labs/mcp-go` v0.43.2 for MCP protocol implementation
+
 ## [3.0.0] - 2026-02-08
 
 ### Breaking Changes
